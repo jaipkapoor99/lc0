@@ -405,6 +405,11 @@ target_link_libraries(lc0_core PUBLIC
   ${CMAKE_DL_LIBS}
 )
 
+if(APPLE)
+  find_library(COREFOUNDATION_FRAMEWORK CoreFoundation REQUIRED)
+  target_link_libraries(lc0_core PUBLIC ${COREFOUNDATION_FRAMEWORK})
+endif()
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15" AND EXISTS "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
   target_link_libraries(lc0_core PUBLIC "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
 endif()
