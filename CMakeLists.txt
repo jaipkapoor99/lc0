@@ -378,7 +378,6 @@ if(ENABLE_CUDA)
     src/neural/backends/cuda/layers.cc
     src/neural/backends/cuda/network_cuda.cc
     src/neural/backends/cuda/common_kernels.cu
-    src/neural/backends/cuda/fp16_kernels.cu
   )
 
   if(ENABLE_CUTLASS)
