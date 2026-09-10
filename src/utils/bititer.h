@@ -54,7 +54,18 @@ inline uint64_t ReverseBitsInBytes(uint64_t v) {
 }
 
 inline constexpr uint64_t ReverseBytesInBytes(uint64_t v) noexcept {
+#if defined(__cpp_lib_byteswap) && __cpp_lib_byteswap >= 202110L
   return std::byteswap(v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __builtin_bswap64(v);
+#elif defined(_MSC_VER)
+  return _byteswap_uint64(v);
+#else
+  v = (v & 0x00000000FFFFFFFF) << 32 | (v & 0xFFFFFFFF00000000) >> 32;
+  v = (v & 0x0000FFFF0000FFFF) << 16 | (v & 0xFFFF0000FFFF0000) >> 16;
+  v = (v & 0x00FF00FF00FF00FF) << 8 | (v & 0xFF00FF00FF00FF00) >> 8;
+  return v;
+#endif
 }
 
 // Transpose across the diagonal connecting bit 7 to bit 56.
