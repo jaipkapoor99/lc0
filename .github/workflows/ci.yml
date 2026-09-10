@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main, 'feat/**', 'fix/**', 'personal/**' ]
+  pull_request:
+    branches: [ master, main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Tier 1 Primary Development Engine: Ubuntu Linux with GCC 15
+  # ---------------------------------------------------------------------------
+  linux-gcc15:
+    name: Linux (GCC 15, C++23, CUDA/CPU)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install GCC 15 and Dependencies
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install -y gcc-15 g++-15 cmake ninja-build ccache libopenblas-dev
+
+      - name: Setup CCache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-gcc15-ccache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-gcc15-ccache-
+
+      - name: Configure CMake
+        env:
+          CC: gcc-15
+          CXX: g++-15
+        run: |
+          cmake -B build/release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DENABLE_TESTS=ON \
+            -DENABLE_CUDA=OFF
+
+      - name: Build lc0 & tests
+        run: |
+          cmake --build build/release --parallel $(nproc)
+
+      - name: Run Tests
+        run: |
+          ctest --test-dir build/release --output-on-failure
+
+      - name: Upload Linux Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: lc0-linux-x86_64
+          path: build/release/lc0
+
+  # ---------------------------------------------------------------------------
+  # Downstream Tier 2: Windows (MSVC)
+  # ---------------------------------------------------------------------------
+  windows-downstream:
+    name: Windows Downstream (MSVC, C++20)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DENABLE_TESTS=OFF `
+            -DENABLE_CUDA=OFF
+
+      - name: Build lc0
+        run: |
+          cmake --build build --config Release --parallel $env:NUMBER_OF_PROCESSORS
+
+      - name: Upload Windows Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: lc0-windows-x64
+          path: build/Release/lc0.exe
+
+  # ---------------------------------------------------------------------------
+  # Downstream Tier 2: macOS (Apple Silicon arm64)
+  # ---------------------------------------------------------------------------
+  macos-downstream:
+    name: macOS Downstream (Apple Silicon, Metal)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Build Tools
+        run: |
+          brew install cmake ninja
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_CUDA=OFF \
+            -DENABLE_METAL=ON
+
+      - name: Build lc0
+        run: |
+          cmake --build build --parallel $(sysctl -n hw.ncpu)
+
+      - name: Upload macOS Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: lc0-macos-arm64
+          path: build/lc0

@@ -1,0 +1,54 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "linux-gcc15-release",
+      "displayName": "Linux Release (GCC 15, C++23, Native Arch)",
+      "description": "Optimized release build using GCC 15 and C++23 with native Zen 5 / AVX-512 flags",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "gcc-15",
+        "CMAKE_CXX_COMPILER": "g++-15",
+        "CMAKE_CXX_STANDARD": "23",
+        "ENABLE_CUDA": "ON",
+        "ENABLE_CUTLASS": "ON",
+        "ENABLE_TESTS": "ON"
+      }
+    },
+    {
+      "name": "linux-gcc15-debug",
+      "displayName": "Linux Debug (GCC 15, C++23)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc-15",
+        "CMAKE_CXX_COMPILER": "g++-15",
+        "CMAKE_CXX_STANDARD": "23",
+        "ENABLE_CUDA": "ON",
+        "ENABLE_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-release",
+      "configurePreset": "linux-gcc15-release"
+    },
+    {
+      "name": "linux-debug",
+      "configurePreset": "linux-gcc15-debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "linux-test",
+      "configurePreset": "linux-gcc15-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
