@@ -26,10 +26,17 @@
 */
 #pragma once
 
+#if defined(USE_HIP)
+#include "hip_compat.h"
+#else
 #include <cublas_v2.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+#define NS_BACKEND cudnn_backend
+#define BACKEND_NAME "CUDA"
+#define BACKEND_NAME_LC "cuda"
+#endif
 
 #include "utils/fp16_utils.h"
 
@@ -39,12 +46,12 @@
 using cudnnHandle_t = void*;
 #endif
 
-#if CUBLAS_VER_MAJOR < 11
+#if !defined(USE_HIP) && CUBLAS_VER_MAJOR < 11
 #define CUBLAS_PEDANTIC_MATH CUBLAS_DEFAULT_MATH
 #endif
 
 namespace lczero {
-namespace cudnn_backend {
+namespace NS_BACKEND {
 
 static constexpr int kNumOutputPolicy = 1858;
 
