@@ -7,6 +7,8 @@
 build/
 builddir/
 __pycache__/
+.ruff_cache/
+.venv/
 compile_commands.json
 CUDA_NN/
 lc0.xcodeproj/
@@ -19,3 +21,4 @@ xcuserdata
 compile_flags.txt
 .vscode
 .mesonpy*
+uv.lock

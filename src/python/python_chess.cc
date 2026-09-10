@@ -25,37 +25,39 @@
   Program grant you additional permission to convey the resulting work.
 */
 
+#include "python/python_chess.h"
+
 #include <pybind11/pybind11.h>
+
 #include <string>
 #include <vector>
-
-#include "python/python_chess.h"
 
 namespace lczero {
 namespace python {
 namespace python_chess {
 
 BoardData GetBoardData(const pybind11::handle& board) {
-    BoardData board_data;
-    
-    py::object board_copy = board.attr("copy")();
-    auto move_stack = board.attr("move_stack");
-    for (auto _ : move_stack) {
-        board_copy.attr("pop")();
-    }
-    
-    board_data.fen = board_copy.attr("fen")().cast<std::string>();
-  
-    board_data.is_c960 = pybind11::hasattr(board, "chess960") ? 
-                         board.attr("chess960").cast<bool>() : false;
-    
-    for (auto move : move_stack) {
-        board_data.moves.push_back(move.attr("uci")().cast<std::string>());
-    }
-    
-    return board_data;
+  BoardData board_data;
+
+  pybind11::object board_copy = board.attr("copy")();
+  auto move_stack = board.attr("move_stack");
+  for (auto _ : move_stack) {
+    board_copy.attr("pop")();
+  }
+
+  board_data.fen = board_copy.attr("fen")().cast<std::string>();
+
+  board_data.is_c960 = pybind11::hasattr(board, "chess960")
+                           ? board.attr("chess960").cast<bool>()
+                           : false;
+
+  for (auto move : move_stack) {
+    board_data.moves.push_back(move.attr("uci")().cast<std::string>());
+  }
+
+  return board_data;
 }
 
-} // namespace python_chess
-} // namespace python
-} // namespace lczero
+}  // namespace python_chess
+}  // namespace python
+}  // namespace lczero

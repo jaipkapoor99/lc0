@@ -25,7 +25,8 @@
 
 
 class Writer:
-    '''A helper class for writing file line by line with indent.'''
+    """A helper class for writing file line by line with indent."""
+
     def __init__(self, fo):
         self.fo = fo
         self.indent = 0
@@ -37,16 +38,16 @@ class Writer:
         self.indent -= 2
 
     def Write(self, text):
-        for line in text.split('\n'):
+        for line in text.split("\n"):
             if line:
-                self.fo.write(' ' * self.indent + line + '\n')
+                self.fo.write(" " * self.indent + line + "\n")
             else:
-                self.fo.write('\n')
+                self.fo.write("\n")
 
-    def Open(self, text='{'):
+    def Open(self, text="{"):
         self.Write(text)
         self.Indent()
 
-    def Close(self, text='}'):
+    def Close(self, text="}"):
         self.Unindent()
         self.Write(text)

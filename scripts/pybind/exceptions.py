@@ -32,21 +32,24 @@ class CppException(PyObject):
         super().__init__(name, *args, **kwargs)
 
     def type_struct_name(self):
-        return f'T{self.name}ExceptionType'
+        return f"T{self.name}ExceptionType"
 
     def Generate(self, w):
-        w.Write(f'PyObject *{self.type_struct_name()};')
+        w.Write(f"PyObject *{self.type_struct_name()};")
 
     def GenerateRegister(self, w, module):
-        w.Write(f'{self.type_struct_name()} = PyErr_NewException('
-                f'"{module.name}.{self.name}", nullptr, nullptr);')
-        w.Write(f'if ({self.type_struct_name()} == nullptr) return nullptr;')
-        w.Write(f'Py_INCREF({self.type_struct_name()});')
-        w.Write(f'PyModule_AddObject(module, "{self.name}", '
-                f'{self.type_struct_name()});')
+        w.Write(
+            f"{self.type_struct_name()} = PyErr_NewException("
+            f'"{module.name}.{self.name}", nullptr, nullptr);'
+        )
+        w.Write(f"if ({self.type_struct_name()} == nullptr) return nullptr;")
+        w.Write(f"Py_INCREF({self.type_struct_name()});")
+        w.Write(
+            f'PyModule_AddObject(module, "{self.name}", {self.type_struct_name()});'
+        )
 
     def GenerateHandle(self, w, func):
         w.Unindent()
-        w.Open(f'}} catch (const {self.cpp_name} &ex) {{')
-        w.Write(f'PyErr_SetString({self.type_struct_name()}, ex.what());')
-        w.Write(f'return {func._failure()};')
+        w.Open(f"}} catch (const {self.cpp_name} &ex) {{")
+        w.Write(f"PyErr_SetString({self.type_struct_name()}, ex.what());")
+        w.Write(f"return {func._failure()};")

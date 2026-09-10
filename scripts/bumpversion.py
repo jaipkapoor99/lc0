@@ -3,8 +3,9 @@
 import argparse
 import os
 
-
-VERSION_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../src/version.inc")
+VERSION_FILE = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "../src/version.inc"
+)
 VERSION_CONTENT = """
 #define LC0_VERSION_MAJOR {}
 #define LC0_VERSION_MINOR {}
@@ -15,20 +16,20 @@ VERSION_CONTENT = VERSION_CONTENT.strip()
 
 
 def get_version():
-    with open(VERSION_FILE, 'r') as f:
+    with open(VERSION_FILE, "r") as f:
         major = int(f.readline().split()[2])
         minor = int(f.readline().split()[2])
         patch = int(f.readline().split()[2])
         postfix = f.readline().split()[2]
 
-    postfix = postfix.replace('"', '')
+    postfix = postfix.replace('"', "")
     return major, minor, patch, postfix
 
 
 def set_version(major, minor, patch, postfix=""):
     version_inc = VERSION_CONTENT.format(major, minor, patch, postfix)
 
-    with open(VERSION_FILE, 'w') as f:
+    with open(VERSION_FILE, "w") as f:
         f.write(version_inc)
 
 
@@ -59,22 +60,16 @@ def main(argv):
         update(major, minor, patch, postfix)
 
     if len(postfix) == 0:
-        print('v{}.{}.{}'.format(major, minor, patch))
+        print(f"v{major}.{minor}.{patch}")
     else:
-        print('v{}.{}.{}-{}'.format(major, minor, patch, postfix))
+        print(f"v{major}.{minor}.{patch}-{postfix}")
 
 
 if __name__ == "__main__":
-    argparser = argparse.ArgumentParser(description=\
-            'Set or read current version.')
-    argparser.add_argument('--major', action='store_true',
-            help='bumps major version')
-    argparser.add_argument('--minor', action='store_true',
-            help='bumps minor version')
-    argparser.add_argument('--patch', action='store_true',
-            help='bumps patch')
-    argparser.add_argument('--postfix', type=str,
-            help='set postfix')
+    argparser = argparse.ArgumentParser(description="Set or read current version.")
+    argparser.add_argument("--major", action="store_true", help="bumps major version")
+    argparser.add_argument("--minor", action="store_true", help="bumps minor version")
+    argparser.add_argument("--patch", action="store_true", help="bumps patch")
+    argparser.add_argument("--postfix", type=str, help="set postfix")
     argv = argparser.parse_args()
     main(argv)
-

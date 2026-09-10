@@ -26,16 +26,16 @@
 
 class RetVal:
     def cpp_val(self):
-        return 'retval_cpp'
+        return "retval_cpp"
 
     def py_val(self):
-        return 'retval'
+        return "retval"
 
     def ret_val(self):
         return self.py_val()
 
     def GenerateDeclaration(self, w):
-        w.Write(f'PyObject *{self.py_val()};')
+        w.Write(f"PyObject *{self.py_val()};")
 
     def GenerateConversion(self, w):
         raise NotImplementedError()
@@ -54,39 +54,47 @@ class NoneRetVal(RetVal):
 
 class GenericStringRetVal(RetVal):
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = Py_BuildValue("s#", '
-                f'{self.cpp_val()}.data(), {self.cpp_val()}.size());')
+        w.Write(
+            f'{self.py_val()} = Py_BuildValue("s#", '
+            f"{self.cpp_val()}.data(), {self.cpp_val()}.size());"
+        )
 
 
 class StringViewRetVal(GenericStringRetVal):
     def cpp_type(self):
-        return 'std::string_view'
+        return "std::string_view"
 
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = Py_BuildValue("s#", '
-                f'{self.cpp_val()}.data(), {self.cpp_val()}.size());')
+        w.Write(
+            f'{self.py_val()} = Py_BuildValue("s#", '
+            f"{self.cpp_val()}.data(), {self.cpp_val()}.size());"
+        )
 
 
 class StringRetVal(GenericStringRetVal):
     def cpp_type(self):
-        return 'const std::string&'
+        return "const std::string&"
 
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = Py_BuildValue("s#", '
-                f'{self.cpp_val()}.data(), {self.cpp_val()}.size());')
+        w.Write(
+            f'{self.py_val()} = Py_BuildValue("s#", '
+            f"{self.cpp_val()}.data(), {self.cpp_val()}.size());"
+        )
 
 
 class ListOfStringsRetVal(RetVal):
     def cpp_type(self):
-        return 'std::vector<std::string>'
+        return "std::vector<std::string>"
 
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = PyList_New({self.cpp_val()}.size());')
-        w.Open(f'for (size_t i = 0; i < {self.cpp_val()}.size(); ++i) {{')
-        w.Write(f'const std::string& s = {self.cpp_val()}[i];')
-        w.Write(f'PyList_SetItem({self.py_val()}, '
-                'i, Py_BuildValue("s#", s.data(), s.size()));')
-        w.Close('}')
+        w.Write(f"{self.py_val()} = PyList_New({self.cpp_val()}.size());")
+        w.Open(f"for (size_t i = 0; i < {self.cpp_val()}.size(); ++i) {{")
+        w.Write(f"const std::string& s = {self.cpp_val()}[i];")
+        w.Write(
+            f"PyList_SetItem({self.py_val()}, "
+            'i, Py_BuildValue("s#", s.data(), s.size()));'
+        )
+        w.Close("}")
 
 
 class NumericRetVal(RetVal):
@@ -95,21 +103,23 @@ class NumericRetVal(RetVal):
 
     def cpp_type(self):
         return {
-            'i': 'int',
-            'u64': 'uint64_t',
-            'f32': 'float',
+            "i": "int",
+            "u64": "uint64_t",
+            "f32": "float",
         }[self.type]
 
     def parse_tuple_format(self):
         return {
-            'i': 'i',
-            'u64': 'K',
-            'f32': 'f',
+            "i": "i",
+            "u64": "K",
+            "f32": "f",
         }[self.type]
 
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = Py_BuildValue('
-                f'"{self.parse_tuple_format()}", {self.cpp_val()});')
+        w.Write(
+            f"{self.py_val()} = Py_BuildValue("
+            f'"{self.parse_tuple_format()}", {self.cpp_val()});'
+        )
 
 
 class ObjCopyRetval(RetVal):
@@ -117,20 +127,21 @@ class ObjCopyRetval(RetVal):
         self.type = type
 
     def cpp_type(self):
-        return f'const {self.type.cpp_name}&'
+        return f"const {self.type.cpp_name}&"
 
     def ret_val(self):
-        return f'&{self.py_val()}->ob_base'
+        return f"&{self.py_val()}->ob_base"
 
     def GenerateDeclaration(self, w):
-        w.Write(f'{self.type.object_struct_name()} *{self.py_val()};')
+        w.Write(f"{self.type.object_struct_name()} *{self.py_val()};")
 
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = PyObject_New('
-                f'{self.type.object_struct_name()}, '
-                f'&{self.type.type_object_name()});')
-        w.Write(f'{self.py_val()}->value = '
-                f'new {self.type.cpp_name}({self.cpp_val()});')
+        w.Write(
+            f"{self.py_val()} = PyObject_New("
+            f"{self.type.object_struct_name()}, "
+            f"&{self.type.type_object_name()});"
+        )
+        w.Write(f"{self.py_val()}->value = new {self.type.cpp_name}({self.cpp_val()});")
 
 
 class ObjOwnerRetval(RetVal):
@@ -138,19 +149,21 @@ class ObjOwnerRetval(RetVal):
         self.type = type
 
     def cpp_type(self):
-        return f'std::unique_ptr<{self.type.cpp_name}>'
+        return f"std::unique_ptr<{self.type.cpp_name}>"
 
     def ret_val(self):
-        return f'&{self.py_val()}->ob_base'
+        return f"&{self.py_val()}->ob_base"
 
     def GenerateDeclaration(self, w):
-        w.Write(f'{self.type.object_struct_name()} *{self.py_val()};')
+        w.Write(f"{self.type.object_struct_name()} *{self.py_val()};")
 
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = PyObject_New('
-                f'{self.type.object_struct_name()}, '
-                f'&{self.type.type_object_name()});')
-        w.Write(f'{self.py_val()}->value = ' f'{self.cpp_val()}.release();')
+        w.Write(
+            f"{self.py_val()} = PyObject_New("
+            f"{self.type.object_struct_name()}, "
+            f"&{self.type.type_object_name()});"
+        )
+        w.Write(f"{self.py_val()}->value = {self.cpp_val()}.release();")
 
 
 class ObjTupleRetVal(RetVal):
@@ -158,17 +171,19 @@ class ObjTupleRetVal(RetVal):
         self.type = type
 
     def cpp_type(self):
-        return f'std::vector<std::unique_ptr<{self.type.cpp_name}>>'
+        return f"std::vector<std::unique_ptr<{self.type.cpp_name}>>"
 
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = PyTuple_New({self.cpp_val()}.size());')
-        w.Open(f'for (size_t i = 0; i < {self.cpp_val()}.size(); ++i) {{')
-        w.Write(f'{self.type.object_struct_name()}* tmp = PyObject_New('
-                f'{self.type.object_struct_name()}, '
-                f'&{self.type.type_object_name()});')
-        w.Write(f'tmp->value = {self.cpp_val()}[i].release();')
-        w.Write(f'PyTuple_SetItem({self.py_val()}, i, &tmp->ob_base);')
-        w.Close('}')
+        w.Write(f"{self.py_val()} = PyTuple_New({self.cpp_val()}.size());")
+        w.Open(f"for (size_t i = 0; i < {self.cpp_val()}.size(); ++i) {{")
+        w.Write(
+            f"{self.type.object_struct_name()}* tmp = PyObject_New("
+            f"{self.type.object_struct_name()}, "
+            f"&{self.type.type_object_name()});"
+        )
+        w.Write(f"tmp->value = {self.cpp_val()}[i].release();")
+        w.Write(f"PyTuple_SetItem({self.py_val()}, i, &tmp->ob_base);")
+        w.Close("}")
 
 
 class IntegralTupleRetVal(RetVal):
@@ -177,24 +192,26 @@ class IntegralTupleRetVal(RetVal):
 
     def cpp_item_type(self):
         return {
-            'i': 'int',
-            'u64': 'uint64_t',
-            'f32': 'float',
+            "i": "int",
+            "u64": "uint64_t",
+            "f32": "float",
         }[self.type]
 
     def parse_tuple_format(self):
         return {
-            'i': 'i',
-            'u64': 'K',
-            'f32': 'f',
+            "i": "i",
+            "u64": "K",
+            "f32": "f",
         }[self.type]
 
     def cpp_type(self):
-        return f'std::vector<{self.cpp_item_type()}>'
+        return f"std::vector<{self.cpp_item_type()}>"
 
     def GenerateConversion(self, w):
-        w.Write(f'{self.py_val()} = PyTuple_New({self.cpp_val()}.size());')
-        w.Open(f'for (size_t i = 0; i < {self.cpp_val()}.size(); ++i) {{')
-        w.Write(f'PyTuple_SetItem({self.py_val()}, i, Py_BuildValue('
-                f'"{self.parse_tuple_format()}", {self.cpp_val()}[i]));')
-        w.Close('}')
+        w.Write(f"{self.py_val()} = PyTuple_New({self.cpp_val()}.size());")
+        w.Open(f"for (size_t i = 0; i < {self.cpp_val()}.size(); ++i) {{")
+        w.Write(
+            f"PyTuple_SetItem({self.py_val()}, i, Py_BuildValue("
+            f'"{self.parse_tuple_format()}", {self.cpp_val()}[i]));'
+        )
+        w.Close("}")

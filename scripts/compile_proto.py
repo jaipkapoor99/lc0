@@ -29,7 +29,6 @@ import argparse
 import os
 import re
 import sys
-from typing import Any
 
 VARINT_TYPES = {
     "int32": "std::int32_t",
@@ -98,7 +97,9 @@ ALLOWED_ATTRIBUTES = {
 class Lexer:
     def __init__(self, text):
         self.text = text
-        self.grammar = [(re.compile(x, re.S + re.M), y) for x, y in GRAMMAR]
+        self.grammar = [
+            (re.compile(x, re.DOTALL + re.MULTILINE), y) for x, y in GRAMMAR
+        ]
         self.cur_token = None
         self.cur_offset = 0
 
@@ -532,7 +533,6 @@ class ProtoFieldParser:
                 w.Write("%s %s_{%s};" % (cpp_type, name, self.attributes["default"]))
             else:
                 w.Write("%s %s_{};" % (cpp_type, name))
-        return
 
 
 class ProtoEnumParser:
@@ -758,7 +758,7 @@ class ProtoMessageParser:
         w.Write("using %s = %s;" % (self.name, self.GetFullName()))
 
     def GenerateMessageDeclarations(self, w):
-        w.Write(f"class %s;" % self.GetFullName())
+        w.Write("class %s;" % self.GetFullName())
         for x in self.types:
             x.GenerateMessageDeclarations(w)
 
