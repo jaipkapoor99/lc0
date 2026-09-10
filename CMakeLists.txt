@@ -44,6 +44,10 @@ elseif(MSVC)
   add_compile_options(/W3 /DNOMINMAX /permissive-)
 endif()
 
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64|ARM64|arm64")
+  add_compile_definitions(NO_PEXT)
+endif()
+
 # ------------------------------------------------------------------------------
 # Generated Version & Build Headers
 # ------------------------------------------------------------------------------

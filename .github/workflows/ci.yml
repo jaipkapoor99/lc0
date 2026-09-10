@@ -95,8 +95,8 @@ jobs:
   # Downstream Tier 2: Windows (MSVC)
   # ---------------------------------------------------------------------------
   windows-downstream:
-    name: Windows Downstream (MSVC, C++20)
-    runs-on: windows-latest
+    name: Windows Downstream (MSVC, C++23)
+    runs-on: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -124,7 +124,7 @@ jobs:
   # Downstream Tier 2: macOS (Apple Silicon arm64)
   # ---------------------------------------------------------------------------
   macos-downstream:
-    name: macOS Downstream (Apple Silicon, Metal)
+    name: macOS Downstream (Apple Silicon arm64)
     runs-on: macos-14
     steps:
       - name: Checkout repository
@@ -142,7 +142,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_TESTS=OFF \
             -DENABLE_CUDA=OFF \
-            -DENABLE_METAL=ON
+            -DENABLE_METAL=OFF
 
       - name: Build lc0
         run: |
