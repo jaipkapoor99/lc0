@@ -123,7 +123,24 @@ add_custom_target(generate_proto_headers DEPENDS ${ALL_PROTO_HEADERS})
 # Dependencies (Threads, ZLIB, Abseil, OpenBLAS, Eigen)
 # ------------------------------------------------------------------------------
 find_package(Threads REQUIRED)
-find_package(ZLIB REQUIRED)
+find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+  message(STATUS "System ZLIB not found; fetching zlib 1.3.1 via FetchContent...")
+  include(FetchContent)
+  FetchContent_Declare(
+    zlib
+    URL https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+    URL_HASH SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(zlib)
+  if(TARGET zlibstatic)
+    add_library(ZLIB::ZLIB ALIAS zlibstatic)
+  elseif(TARGET zlib)
+    add_library(ZLIB::ZLIB ALIAS zlib)
+  endif()
+endif()
 
 if(ENABLE_BLAS)
   find_package(BLAS)
