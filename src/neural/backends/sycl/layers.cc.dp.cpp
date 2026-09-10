@@ -768,125 +768,11 @@ template <typename DataType> PolicyMapLayer<DataType>::~PolicyMapLayer() {
   free(weights_, sycl_queue_);
 }
 
-template <typename DataType>
-FusedWinogradConvSELayer<DataType>::FusedWinogradConvSELayer(
-    BaseLayer<DataType>* ip, int C, int H, int W, int Cin,
-    ActivationFunction activation, bool bias, bool skip_add, bool se, int se_k,
-    sycl::queue &sycl_queue, bool op_nhcw)
-    : BaseLayer<DataType>(C, H, W, ip, false, sycl_queue),
-      c_input_(Cin),
-      act_(activation),
-      use_bias_(bias),
-      skip_add_(skip_add),
-      has_se_(se),
-      se_k_(se_k),
-      op_nhcw_(op_nhcw){
-
-  if (act_ != ACTIVATION_RELU && act_ != ACTIVATION_MISH && act_ != ACTIVATION_NONE) {
-    throw Exception("Unsupported activation for fused winograd conv SE layer.");
-  }
-
-  // Allocate memory for weights (filter tensor) and biases.
-  const size_t weight_size = sizeof(DataType) * c_input_ * C * 3 * 3;
-
-  if (use_bias_) {
-    const size_t bias_size = sizeof(DataType) * C;
-    biases_ = (DataType *)sycl::malloc_device(bias_size, sycl_queue_);
-  }
-
-  // 6x6 transformed filter size, for 3x3 convolution
-  transformed_weights_ = (DataType *)sycl::malloc_device(weight_size * 4, sycl_queue_);
-
-  if (has_se_) {
-    const size_t num_weights1 = C * se_k_;
-    const size_t num_weights2 = num_weights1 * 2;
-    const size_t num_biases1 = se_k_;
-    const size_t num_biases2 = 2 * C;
-
-    const size_t weight_size1 = sizeof(DataType) * num_weights1;
-    const size_t weight_size2 = sizeof(DataType) * num_weights2;
-    const size_t biases_size1 = sizeof(DataType) * num_biases1;
-    const size_t biases_size2 = sizeof(DataType) * num_biases2;
-
-    w1_ = (DataType *)sycl::malloc_device(weight_size1 * 4, sycl_queue_);
-    w2_ = (DataType *)sycl::malloc_device(weight_size2 * 4, sycl_queue_);
-    b1_ = (DataType *)sycl::malloc_device(biases_size1 * 4, sycl_queue_);
-    b2_ = (DataType *)sycl::malloc_device(biases_size2 * 4, sycl_queue_);
-  }
-}
-
-template <typename DataType> void FusedWinogradConvSELayer<DataType>::LoadWeights(float* pfilter,
-                                                     float* pBias,
-                                                     void* scratch) {
-  const size_t weight_size = sizeof(float) * c_input_ * C * 3 * 3;
-  const size_t bias_size = sizeof(float) * C;
-
-  // Store untransformed weights in scratch.
-  const DataType* weights = (DataType*)scratch + weight_size + bias_size;
-
-  // first copy from CPU memory to scratch space in GPU memory
-  // and then do the type conversion using a kernel
-  assert(scratch);
-  //sycl_queue_.memcpy(scratch, pfilter, weight_size).wait_and_throw();
-  sycl_queue_.memcpy(scratch, pfilter, weight_size).wait();
-  copyTypeConverted((DataType*)weights, (float*)scratch, C * c_input_ * 3 * 3, sycl_queue_);
-
-  if (pBias) {
-    
-    
-    //sycl_queue_.memcpy(scratch, pBias, bias_size).wait();
-    sycl_queue_.memcpy(scratch, pBias, bias_size);  
-
-    float total = 0;
-    for(int i = 0; i < C; i++)
-      total = pBias[i] + total;
-
-    copyTypeConverted((DataType*)biases_, (float*)scratch, C, sycl_queue_);
-  }
-
-  // run winograd transform kernel for the filter
-  FilterTransform(C, c_input_, transformed_weights_, weights, sycl_queue_);
-}
-
 // TODO: Do this on the GPU to improve network load time!
 static inline void CpuTranspose(float* op, float* ip, size_t rows,
                                 size_t cols) {
   for (size_t i = 0; i < rows; i++)
     for (size_t j = 0; j < cols; j++) op[j * rows + i] = ip[i * cols + j];
-}
-
-template <typename DataType>
-void FusedWinogradConvSELayer<DataType>::LoadSEWeights(float* w1, float* b1,
-                                                       float* w2, float* b2,
-                                                       void* scratch) {
-  const size_t num_weights1 = C * se_k_;
-  const size_t num_weights2 = num_weights1 * 2;
-  const size_t num_biases1 = se_k_;
-  const size_t num_biases2 = 2 * C;
-
-  // The shader uses transposed weight matrices.
-  std::vector<float> temp_transposed(num_weights2);
-
-  CpuTranspose(temp_transposed.data(), w1, se_k_, C);
-  //sycl_queue_.memcpy(scratch, temp_transposed.data(), num_weights1 * sizeof(float)).wait();
-  sycl_queue_.memcpy(scratch, temp_transposed.data(), num_weights1 * sizeof(float)).wait();
-  
-  copyTypeConverted((DataType*)w1_, (float*)scratch, (int)num_weights1, sycl_queue_);
-
-  CpuTranspose(temp_transposed.data(), w2, 2 * C, se_k_);
-
-  //sycl_queue_.memcpy(scratch, temp_transposed.data(), num_weights2 * sizeof(float)).wait();
-  sycl_queue_.memcpy(scratch, temp_transposed.data(), num_weights2 * sizeof(float)).wait();
-  copyTypeConverted((DataType*)w2_, (float*)scratch, (int)num_weights2, sycl_queue_);
-
-  //sycl_queue_.memcpy(scratch, b1, num_biases1 * sizeof(float)).wait();
-  sycl_queue_.memcpy(scratch, b1, num_biases1 * sizeof(float)).wait();
-  copyTypeConverted((DataType*)b1_, (float*)scratch, (int)num_biases1, sycl_queue_);
-
-  //sycl_queue_.memcpy(scratch, b2, num_biases2 * sizeof(float)).wait();
-  sycl_queue_.memcpy(scratch, b2, num_biases2 * sizeof(float)).wait();
-  copyTypeConverted((DataType*)b2_, (float*)scratch, (int)num_biases2, sycl_queue_);
-
 }
 
 template <>
@@ -1014,85 +900,6 @@ template <> void BaseLayer<float>::cublasRowMajorMatrixMul(const float* A, const
       oneapi::mkl::blas::column_major::gemm_batch(sycl_queue, transpose_type_notranspose,
             transpose_type_notranspose, N_, M_, K_, floatOne, B, N_, N_ * K_, A, K_, K_ * M_, floatZero, Out, N_, N_ * M_, batchSize);
     #endif
-  }
-}
-
-template <typename DataType>
-void FusedWinogradConvSELayer<DataType>::Eval(
-    int N, DataType* output, const DataType* input, const DataType* input2,
-    void* scratch, size_t scratch_size, sycl::queue &sycl_queue, DataType***) {
-  // Split the scratch space into two parts - use first part for holding
-  // transformed input and second part for transformed output.
-
-  //CERR << "FusedWinogradConvSELayer<DataType>::Eval. ";
-
-  DataType* transformed_input = (DataType*)scratch;
-  DataType* transformed_output =
-      transformed_input + scratch_size / (2 * sizeof(DataType));
-
-  InputTransform<DataType, false>(N, c_input_, transformed_input, input, sycl_queue);
-  BaseLayer<DataType>::cublasRowMajorMatrixMul(
-      transformed_input, transformed_weights_, transformed_output, N * 4, C, c_input_, 36, sycl_queue);
-
-  if (act_ == ACTIVATION_NONE) {
-    if (!has_se_ && use_bias_ && !skip_add_)
-      OutputTransform<DataType, false, ACTIVATION_NONE, true, false, false, false>(
-          N, C, 0, output, transformed_output, nullptr, biases_, nullptr, nullptr, nullptr, nullptr, sycl_queue);
-    else
-      throw Exception("unsupported network type!");
-  } else if (act_ == ACTIVATION_RELU) {
-    if (has_se_ && use_bias_ && skip_add_)
-      OutputTransform<DataType, true, ACTIVATION_RELU, true, true, false, false>(
-          N, C, se_k_, output, transformed_output, input2, biases_, w1_, b1_,
-          w2_, b2_, sycl_queue);
-    else if (!has_se_ && use_bias_ && !skip_add_) {
-      if (op_nhcw_)
-        OutputTransform<DataType, false, ACTIVATION_RELU, true, false, false, true>(
-            N, C, 0, output, transformed_output, nullptr, biases_, nullptr,
-            nullptr, nullptr, nullptr, sycl_queue);
-      else
-        OutputTransform<DataType, false, ACTIVATION_RELU, true, false, false, false>(
-            N, C, 0, output, transformed_output, nullptr, biases_, nullptr,
-            nullptr, nullptr, nullptr, sycl_queue);
-    } else if (!has_se_ && use_bias_ && skip_add_)
-      OutputTransform<DataType, false, ACTIVATION_RELU, true, true, false, false>(
-          N, C, 0, output, transformed_output, input2, biases_, nullptr,
-          nullptr, nullptr, nullptr, sycl_queue);
-    else
-      throw Exception("unsupported network type!");
-  } else if (act_ == ACTIVATION_MISH) {
-    if (has_se_ && use_bias_ && skip_add_)
-      OutputTransform<DataType, true, ACTIVATION_MISH, true, true, false, false>(
-          N, C, se_k_, output, transformed_output, input2, biases_, w1_, b1_,
-          w2_, b2_, sycl_queue);
-    else if (!has_se_ && use_bias_ && !skip_add_) {
-      if (op_nhcw_)
-        OutputTransform<DataType, false, ACTIVATION_MISH, true, false, false, true>(
-            N, C, 0, output, transformed_output, nullptr, biases_, nullptr,
-            nullptr, nullptr, nullptr, sycl_queue);
-      else
-        OutputTransform<DataType, false, ACTIVATION_MISH, true, false, false, false>(
-            N, C, 0, output, transformed_output, nullptr, biases_, nullptr,
-            nullptr, nullptr, nullptr, sycl_queue);
-    } else if (!has_se_ && use_bias_ && skip_add_)
-      OutputTransform<DataType, false, ACTIVATION_MISH, true, true, false, false>(
-          N, C, 0, output, transformed_output, input2, biases_, nullptr,
-          nullptr, nullptr, nullptr, sycl_queue);
-    else
-      throw Exception("unsupported network type!");
-  } else
-    throw Exception("unsupported network type!");
-}
-
-template <typename DataType>
-FusedWinogradConvSELayer<DataType>::~FusedWinogradConvSELayer() {
-  sycl::free(transformed_weights_, sycl_queue_);
-  if (use_bias_) sycl::free(biases_, sycl_queue_);
-  if (has_se_) {
-    sycl::free(w1_, sycl_queue_);
-    sycl::free(w2_, sycl_queue_);
-    sycl::free(b1_, sycl_queue_);
-    sycl::free(b2_, sycl_queue_);
   }
 }
 
@@ -2763,9 +2570,6 @@ template class SELayer<float>;
 
 template class PolicyMapLayer<sycl::half>;
 template class PolicyMapLayer<float>;
-
-template class FusedWinogradConvSELayer<sycl::half>;
-template class FusedWinogradConvSELayer<float>;
 
 template class Conv1Layer<sycl::half>;
 template class Conv1Layer<float>;

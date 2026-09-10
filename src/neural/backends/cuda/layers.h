@@ -36,12 +36,7 @@
 #include "cuda_common.h"
 #include "neural/network_legacy.h"
 #include "neural/tables/activation_function.h"
-
-#ifdef USE_CUDNN
-#include <cudnn.h>
-#else
 using cudnnHandle_t = void*;
-#endif
 
 namespace lczero {
 namespace NS_BACKEND {
@@ -83,54 +78,6 @@ class BaseLayer {
                                DataType* Out, int M, int N, int K,
                                int batchSize, cublasHandle_t cublas);
 };
-
-#ifdef USE_CUDNN
-template <typename DataType>
-class ConvLayer : public BaseLayer<DataType> {
-  using BaseLayer<DataType>::C;
-  using BaseLayer<DataType>::H;
-  using BaseLayer<DataType>::W;
-  using BaseLayer<DataType>::GetC;
-  using BaseLayer<DataType>::GetH;
-  using BaseLayer<DataType>::GetW;
-  using BaseLayer<DataType>::nhwc_;
-
- public:
-  ConvLayer(BaseLayer<DataType>* ip, int C, int H, int W, int size, int Cin,
-            ActivationFunction activation = ACTIVATION_NONE, bool bias = false);
-
-  ConvLayer(bool nhwc, int C, int H, int W, int size, int Cin,
-            ActivationFunction activation = ACTIVATION_NONE, bool bias = false);
-
-  ~ConvLayer();
-  void LoadWeights(float* pfilter, float* pBias, void* scratch);
-  void Eval(int N, DataType* output, const DataType* input,
-            const DataType* input2, void* scratch, size_t scratch_size,
-            cudnnHandle_t cudnn, cublasHandle_t cublas, cudaStream_t stream,
-            DataType*** = nullptr) override;
-
- private:
-  const int c_input_;
-  const int filter_size_;
-  const ActivationFunction act_;
-  const bool use_bias_;
-
-  DataType* biases = nullptr;
-  DataType* weights = nullptr;
-
-  cudnnFilterDescriptor_t filter_desc_;
-  cudnnConvolutionDescriptor_t conv_desc_;
-  cudnnConvolutionFwdAlgo_t conv_algo_;
-
-  cudnnTensorDescriptor_t bias_desc_;
-  cudnnTensorDescriptor_t in_tensor_desc_;
-  cudnnTensorDescriptor_t out_tensor_desc_;
-  cudnnActivationDescriptor_t activation_;
-
-  void init();
-};
-
-#endif
 
 template <typename DataType>
 class FCLayer : public BaseLayer<DataType> {
@@ -209,50 +156,6 @@ class SELayer : public BaseLayer<DataType> {
   int numFc1Out_;
   bool addPrevLayerBias_;
   const ActivationFunction act_;
-};
-
-// Multi-pass Winograd Conv fused with (optional) SE
-template <typename DataType>
-class FusedWinogradConvSELayer : public BaseLayer<DataType> {
-  using BaseLayer<DataType>::C;
-  using BaseLayer<DataType>::H;
-  using BaseLayer<DataType>::W;
-  using BaseLayer<DataType>::GetC;
-  using BaseLayer<DataType>::GetH;
-  using BaseLayer<DataType>::GetW;
-  using BaseLayer<DataType>::nhwc_;
-
- public:
-  FusedWinogradConvSELayer(BaseLayer<DataType>* ip, int C, int H, int W,
-                           int Cin, ActivationFunction activation, bool bias,
-                           bool skipAdd, bool se, int se_k, bool use_gemm_ex,
-                           bool op_nhcw = false);
-
-  ~FusedWinogradConvSELayer();
-  void LoadWeights(float* pfilter, float* pBias, void* scratch);
-  void LoadSEWeights(float* w1, float* b1, float* w2, float* b2, void* scratch);
-  void Eval(int N, DataType* output, const DataType* input,
-            const DataType* input2, void* scratch, size_t scratch_size,
-            cudnnHandle_t cudnn, cublasHandle_t cublas, cudaStream_t stream,
-            DataType*** = nullptr) override;
-
- private:
-  const int c_input_;
-  const ActivationFunction act_;
-  const bool use_bias_;
-  const bool skip_add_;
-  const bool has_se_;
-  const int se_k_;
-  const bool op_nhcw_;
-
-  DataType* biases_ = nullptr;
-  DataType* transformed_weights_ = nullptr;  // After winograd transform.
-
-  // Weights and Biases for (optional) SE.
-  DataType* w1_;
-  DataType* w2_;
-  DataType* b1_;
-  DataType* b2_;
 };
 
 template <typename DataType>

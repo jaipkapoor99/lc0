@@ -21,6 +21,7 @@ option(ENABLE_BLAS "Enable BLAS/OpenBLAS neural backend" ON)
 option(ENABLE_METAL "Enable Apple Metal neural backend (macOS)" OFF)
 option(ENABLE_TESTS "Build unit test suite" ON)
 option(ENABLE_NATIVE_ARCH "Enable -march=native optimizations on Linux" ON)
+option(ENABLE_PYTHON_BINDINGS "Build Python bindings" OFF)
 
 # ------------------------------------------------------------------------------
 # Global Compiler Flags & Architecture Optimization
@@ -327,6 +328,7 @@ add_library(lc0_core STATIC
   ${LC0_CORE_SOURCES}
   ${ABSL_SOURCES}
 )
+set_target_properties(lc0_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_dependencies(lc0_core generate_proto_headers)
 
 target_include_directories(lc0_core PUBLIC
@@ -365,9 +367,9 @@ if(ENABLE_CUDA)
   enable_language(CUDA)
   set(CMAKE_CUDA_STANDARD 20)
   set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-  # Default architectures targeting Ampere (80/86), Ada Lovelace (89), Hopper (90), Blackwell (100/120)
+  # Default architectures: use 'native' for peak performance and direct SASS generation without driver PTX JIT
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES OR CMAKE_CUDA_ARCHITECTURES STREQUAL "")
-    set(CMAKE_CUDA_ARCHITECTURES 80 86 89 90 120)
+    set(CMAKE_CUDA_ARCHITECTURES native)
   endif()
 
   find_package(CUDAToolkit REQUIRED)
@@ -416,6 +418,24 @@ if(ENABLE_CUDA)
 
   target_link_libraries(lc0_core PUBLIC lc0_cuda)
   add_compile_definitions(USE_CUDA)
+endif()
+
+# ------------------------------------------------------------------------------
+# Python bindings
+# ------------------------------------------------------------------------------
+if(ENABLE_PYTHON_BINDINGS)
+  find_package(Python3 REQUIRED COMPONENTS Development.Module)
+  find_package(pybind11 CONFIG REQUIRED)
+
+  pybind11_add_module(backends
+    src/python/bindings.cc
+    src/python/python_chess.cc
+  )
+  target_include_directories(backends PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+  )
+  target_link_libraries(backends PRIVATE lc0_core)
+  install(TARGETS backends LIBRARY DESTINATION . RUNTIME DESTINATION .)
 endif()
 
 # ------------------------------------------------------------------------------

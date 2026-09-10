@@ -160,50 +160,6 @@ class SELayer : public BaseLayer<DataType> {
   const ActivationFunction act_;
 };
 
-// Multi-pass Winograd Conv fused with (optional) SE
-template <typename DataType>
-class FusedWinogradConvSELayer : public BaseLayer<DataType> {
-  using BaseLayer<DataType>::C;
-  using BaseLayer<DataType>::H;
-  using BaseLayer<DataType>::W;
-  using BaseLayer<DataType>::GetC;
-  using BaseLayer<DataType>::GetH;
-  using BaseLayer<DataType>::GetW;
-  using BaseLayer<DataType>::nhwc_;
-  using BaseLayer<DataType>::sycl_queue_;
-
- public:
-  FusedWinogradConvSELayer(BaseLayer<DataType>* ip, int C, int H, int W,
-                           int Cin, ActivationFunction activation, bool bias,
-                           bool skipAdd, bool se, int se_k, 
-                           sycl::queue &sycl_queue, bool op_nhcw = false);
-
-  ~FusedWinogradConvSELayer();
-  void LoadWeights(float* pfilter, float* pBias, void* scratch);
-  void LoadSEWeights(float* w1, float* b1, float* w2, float* b2, void* scratch);
-  void Eval(int N, DataType* output, const DataType* input,
-            const DataType* input2, void* scratch, size_t scratch_size,
-            sycl::queue &sycl_queue, DataType*** = nullptr) override;
-
- private:
-  const int c_input_;
-  const ActivationFunction act_;
-  const bool use_bias_;
-  const bool skip_add_;
-  const bool has_se_;
-  const int se_k_;
-  const bool op_nhcw_;
-
-  DataType* biases_ = nullptr;
-  DataType* transformed_weights_ = nullptr;  // After winograd transform.
-
-  // Weights and Biases for (optional) SE.
-  DataType* w1_;
-  DataType* w2_;
-  DataType* b1_;
-  DataType* b2_;
-};
-
 template <typename DataType>
 class Conv1Layer : public BaseLayer<DataType> {
   using BaseLayer<DataType>::C;

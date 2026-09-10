@@ -458,72 +458,14 @@ class CudaNetwork : public Network {
 
     // 2. Build the network, and copy the weights to GPU memory.
 
-    // Input conv only used if there are residual blocks in the network
+    // Input conv only used if there are residual blocks in the network.
+    // Legacy CNN residual networks are no longer supported on the cuda backend
+    // (FusedWinogradConvSELayer has been removed). Use a transformer-based
+    // network instead.
     if (numBlocks_ > 0) {
-      if constexpr (std::is_same<__nv_bfloat16, DataType>::value) {
-        throw Exception(
-            "CNN residual networks are not supported on cuda-bf16 backend. "
-            "Please use cuda-fp16.");
-      } else {
-        // Input.
-        {
-          auto inputConv = std::make_unique<FusedWinogradConvSELayer<DataType>>(
-              nullptr, kNumFilters, 8, 8, kNumInputPlanes, act, true, false,
-              false, 0, use_gemm_ex, use_res_block_winograd_fuse_opt_);
-          inputConv->LoadWeights(&weights.input.weights[0],
-                                 &weights.input.biases[0], scratch_mem_);
-          network_.emplace_back(std::move(inputConv));
-        }
-
-        // Residual block.
-        for (int block = 0; block < numBlocks_; block++) {
-          bool has_se = weights.residual[block].has_se;
-          int se_k = (int)weights.residual[block].se.b1.size();
-
-          if (use_res_block_winograd_fuse_opt_) {
-            auto layer = std::make_unique<ResidualBlock<DataType>>(
-                getLastLayer(), kNumFilters, has_se, se_k, use_gemm_ex,
-                block == 0, block == (numBlocks_ - 1), act,
-                deviceProp.sharedMemPerBlockOptin);
-            layer->LoadWeights0(&weights.residual[block].conv1.weights[0],
-                                &weights.residual[block].conv1.biases[0],
-                                scratch_mem_);
-            layer->LoadWeights1(&weights.residual[block].conv2.weights[0],
-                                &weights.residual[block].conv2.biases[0],
-                                scratch_mem_);
-            if (has_se)
-              layer->LoadSEWeights(&weights.residual[block].se.w1[0],
-                                   &weights.residual[block].se.b1[0],
-                                   &weights.residual[block].se.w2[0],
-                                   &weights.residual[block].se.b2[0],
-                                   scratch_mem_);
-            network_.emplace_back(std::move(layer));
-          } else {
-            auto conv1 = std::make_unique<FusedWinogradConvSELayer<DataType>>(
-                getLastLayer(), kNumFilters, 8, 8, kNumFilters, act, true, false,
-                false, 0, use_gemm_ex);
-            conv1->LoadWeights(&weights.residual[block].conv1.weights[0],
-                               &weights.residual[block].conv1.biases[0],
-                               scratch_mem_);
-            network_.emplace_back(std::move(conv1));
-
-            auto conv2 = std::make_unique<FusedWinogradConvSELayer<DataType>>(
-                getLastLayer(), kNumFilters, 8, 8, kNumFilters, act, true, true,
-                has_se, se_k, use_gemm_ex);
-            conv2->LoadWeights(&weights.residual[block].conv2.weights[0],
-                               &weights.residual[block].conv2.biases[0],
-                               scratch_mem_);
-            if (has_se)
-              conv2->LoadSEWeights(&weights.residual[block].se.w1[0],
-                                   &weights.residual[block].se.b1[0],
-                                   &weights.residual[block].se.w2[0],
-                                   &weights.residual[block].se.b2[0],
-                                   scratch_mem_);
-            network_.emplace_back(std::move(conv2));
-          }
-        }
-        resi_last_ = getLastLayer();
-      }
+      throw Exception(
+          "Legacy CNN residual networks are no longer supported on the cuda "
+          "backend. Please use a transformer-based network.");
     }
 
     if (attn_body_) {
@@ -570,35 +512,10 @@ class CudaNetwork : public Network {
 
       } else {
         if (conv_policy_) {
-          assert(!attn_body_);  // not supported with attention body
-          if constexpr (std::is_same<__nv_bfloat16, DataType>::value) {
-            throw Exception(
-                "Convolution policy head is not supported on cuda-bf16 backend. "
-                "Please use cuda-fp16.");
-          } else {
-            auto conv1 = std::make_unique<FusedWinogradConvSELayer<DataType>>(
-                resi_last_, kNumFilters, 8, 8, kNumFilters, act, true, false,
-                false, 0, use_gemm_ex);
-            conv1->LoadWeights(&head.policy1.weights[0],
-                               &head.policy1.biases[0], scratch_mem_);
-            network_.emplace_back(std::move(conv1));
-
-            auto pol_channels = head.policy.biases.size();
-
-            // No relu
-            auto conv2 = std::make_unique<FusedWinogradConvSELayer<DataType>>(
-                getLastLayer(), pol_channels, 8, 8, kNumFilters,
-                ACTIVATION_NONE, true, false, false, 0, use_gemm_ex);
-            conv2->LoadWeights(&head.policy.weights[0], &head.policy.biases[0],
-                               scratch_mem_);
-            network_.emplace_back(std::move(conv2));
-
-            auto policymap = std::make_unique<PolicyMapLayer<DataType>>(
-                getLastLayer(), kNumOutputPolicy, 1, 1, 73 * 8 * 8, false);
-            policymap->LoadWeights(kConvPolicyMap, scratch_mem_);
-
-            network_.emplace_back(std::move(policymap));
-          }
+          throw Exception(
+              "Legacy convolution policy head is no longer supported on the "
+              "cuda backend. Please use a transformer-based network with "
+              "attention policy.");
         } else {
           assert(!attn_body_);  // not supported with attention body
           auto convPol = std::make_unique<Conv1Layer<DataType>>(
