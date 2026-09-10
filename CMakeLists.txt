@@ -127,9 +127,42 @@ if(ENABLE_BLAS)
   add_compile_definitions(USE_BLAS USE_OPENBLAS)
 endif()
 
-# Subprojects / In-tree Third-Party Libraries
-set(EIGEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/eigen-3.4.0")
-set(ABSEIL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/abseil-cpp-20240722.0")
+# ------------------------------------------------------------------------------
+# Subprojects / Third-Party Libraries (In-tree or FetchContent fallback)
+# ------------------------------------------------------------------------------
+include(FetchContent)
+
+# 1. Abseil C++
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/abseil-cpp-20240722.0/absl/base/internal/cycleclock.cc")
+  set(ABSEIL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/abseil-cpp-20240722.0")
+else()
+  message(STATUS "Fetching Abseil 20240722.0...")
+  FetchContent_Declare(
+    abseil_source
+    URL https://github.com/abseil/abseil-cpp/releases/download/20240722.0/abseil-cpp-20240722.0.tar.gz
+    URL_HASH SHA256=f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SOURCE_SUBDIR __nonexistent__
+  )
+  FetchContent_MakeAvailable(abseil_source)
+  set(ABSEIL_DIR "${abseil_source_SOURCE_DIR}")
+endif()
+
+# 2. Eigen
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/eigen-3.4.0/Eigen/Dense")
+  set(EIGEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/eigen-3.4.0")
+else()
+  message(STATUS "Fetching Eigen 3.4.0...")
+  FetchContent_Declare(
+    eigen_source
+    URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.bz2
+    URL_HASH SHA256=b4c198460eba6f28d34894e3a5710998818515104d6e74e5cc331ce31e46e626
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SOURCE_SUBDIR __nonexistent__
+  )
+  FetchContent_MakeAvailable(eigen_source)
+  set(EIGEN_DIR "${eigen_source_SOURCE_DIR}")
+endif()
 
 # ------------------------------------------------------------------------------
 # Core Engine Library (lc0_core)
@@ -381,7 +414,19 @@ if(ENABLE_CUDA)
   )
 
   if(ENABLE_CUTLASS)
-    set(CUTLASS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/cutlass")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/cutlass/include/cutlass/cutlass.h")
+      set(CUTLASS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/cutlass")
+    else()
+      message(STATUS "Fetching CUTLASS v3.5.0...")
+      FetchContent_Declare(
+        cutlass_source
+        URL https://github.com/NVIDIA/cutlass/archive/refs/tags/v3.5.0.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        SOURCE_SUBDIR __nonexistent__
+      )
+      FetchContent_MakeAvailable(cutlass_source)
+      set(CUTLASS_DIR "${cutlass_source_SOURCE_DIR}")
+    endif()
     list(APPEND CUDA_SOURCES src/neural/backends/cuda/cutlass_kernels.cu)
   endif()
 
