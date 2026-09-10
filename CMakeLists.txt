@@ -36,6 +36,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   if(ENABLE_NATIVE_ARCH AND NOT MSVC)
     add_compile_options(-march=native)
   endif()
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15")
+    link_directories(/usr/lib/gcc/x86_64-linux-gnu/15)
+  endif()
 elseif(MSVC)
   add_compile_options(/W3 /DNOMINMAX /permissive-)
 endif()
@@ -341,6 +344,10 @@ target_link_libraries(lc0_core PUBLIC
   ${CMAKE_DL_LIBS}
 )
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15" AND EXISTS "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
+  target_link_libraries(lc0_core PUBLIC "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
+endif()
+
 if(ENABLE_BLAS)
   if(TARGET OpenBLAS::OpenBLAS)
     target_link_libraries(lc0_core PUBLIC OpenBLAS::OpenBLAS)
@@ -435,6 +442,9 @@ elseif(MSVC)
   target_link_libraries(lc0 PRIVATE lc0_core)
 else()
   # Linux GCC / Clang
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15" AND EXISTS "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
+    target_link_libraries(lc0 PRIVATE "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
+  endif()
   target_link_libraries(lc0 PRIVATE
     -Wl,--whole-archive lc0_core -Wl,--no-whole-archive
   )
