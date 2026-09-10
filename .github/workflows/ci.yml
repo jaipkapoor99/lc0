@@ -12,6 +12,35 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Python Quality Assurance: Ruff & Pyrefly
+  # ---------------------------------------------------------------------------
+  python-lint:
+    name: Python Lint & Type Check (Ruff & Pyrefly)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install Python dependencies
+        run: uv sync --group dev --no-install-project
+
+      - name: Run Ruff (Linter & Formatter)
+        run: |
+          uv run --no-sync ruff check .
+          uv run --no-sync ruff format --check .
+
+      - name: Run Pyrefly Type Checker
+        run: uv run --no-sync pyrefly check
+
+  # ---------------------------------------------------------------------------
   # Tier 1 Primary Development Engine: Ubuntu Linux with GCC 15
   # ---------------------------------------------------------------------------
   linux-gcc15:
