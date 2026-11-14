@@ -30,7 +30,6 @@
 #include "hip_compat.h"
 #else
 #include <cublas_v2.h>
-#include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
 #define NS_BACKEND cudnn_backend
@@ -47,7 +46,11 @@
 
 #include "utils/fp16_utils.h"
 
-using cudnnHandle_t = void*;
+#ifdef USE_CUDNN
+#include <cudnn.h>
+#else
+typedef void* cudnnHandle_t;
+#endif
 
 #if !defined(USE_HIP) && CUBLAS_VER_MAJOR < 11
 #define CUBLAS_PEDANTIC_MATH CUBLAS_DEFAULT_MATH
@@ -71,9 +74,15 @@ static constexpr int kMaxResBlockFusingSeFp16AmpereSmem =
     sizeof(half);  // shared memory used by the special
                    // kernel
 
+#ifdef USE_CUDNN
+void CudnnError(cudnnStatus_t status, const char* file, const int& line);
+#endif
 void CublasError(cublasStatus_t status, const char* file, const int& line);
 void CudaError(cudaError_t status, const char* file, const int& line);
 
+#ifdef USE_CUDNN
+#define ReportCUDNNErrors(status) CudnnError(status, __FILE__, __LINE__)
+#endif
 #define ReportCUBLASErrors(status) CublasError(status, __FILE__, __LINE__)
 #define ReportCUDAErrors(status) CudaError(status, __FILE__, __LINE__)
 

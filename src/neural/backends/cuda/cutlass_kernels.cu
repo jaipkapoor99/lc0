@@ -112,25 +112,48 @@ void fusedMHACutlass(void* output, void* q, void* k, void* v, void* skip,
 template <typename DataType>
 void fusedMHA(void* output, void* mha_q, void* mha_k, void* mha_v, void* skip,
               int batch_size, int num_heads, int depth, cudaStream_t stream) {
-  using ElementType =
-      std::conditional_t<std::is_same<__nv_bfloat16, DataType>::value,
-                         cutlass::bfloat16_t, cutlass::half_t>;
-  if (skip == nullptr) {
-    fusedMHACutlass<ElementType, false>(output, mha_q, mha_k, mha_v, skip,
-                                        batch_size, num_heads, depth, stream);
+  if constexpr (std::is_same<DataType, float>::value) {
+    throw Exception("Fused MHA is not supported for FP32.");
+  }
+#if LC0_CUDA_BF16_SUPPORTED
+  else if constexpr (std::is_same<DataType, __nv_bfloat16>::value) {
+    if (skip == nullptr) {
+      fusedMHACutlass<cutlass::bfloat16_t, false>(
+          output, mha_q, mha_k, mha_v, skip, batch_size, num_heads, depth,
+          stream);
+    } else {
+      fusedMHACutlass<cutlass::bfloat16_t, true>(
+          output, mha_q, mha_k, mha_v, skip, batch_size, num_heads, depth,
+          stream);
+    }
+  }
+#endif
+  else if constexpr (std::is_same<DataType, half>::value) {
+    if (skip == nullptr) {
+      fusedMHACutlass<cutlass::half_t, false>(
+          output, mha_q, mha_k, mha_v, skip, batch_size, num_heads, depth,
+          stream);
+    } else {
+      fusedMHACutlass<cutlass::half_t, true>(
+          output, mha_q, mha_k, mha_v, skip, batch_size, num_heads, depth,
+          stream);
+    }
   } else {
-    fusedMHACutlass<ElementType, true>(output, mha_q, mha_k, mha_v, skip,
-                                       batch_size, num_heads, depth, stream);
+    throw Exception("Unsupported data type for Fused MHA.");
   }
 }
 
 template void fusedMHA<half>(void* output, void* mha_q, void* mha_k,
                              void* mha_v, void* skip, int batch_size,
                              int num_heads, int depth, cudaStream_t stream);
+
+#if LC0_CUDA_BF16_SUPPORTED
 template void fusedMHA<__nv_bfloat16>(void* output, void* mha_q, void* mha_k,
                                       void* mha_v, void* skip, int batch_size,
                                       int num_heads, int depth,
                                       cudaStream_t stream);
+#endif
+
 template void fusedMHA<float>(void* output, void* mha_q, void* mha_k,
                               void* mha_v, void* skip, int batch_size,
                               int num_heads, int depth, cudaStream_t stream);
