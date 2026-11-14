@@ -41,7 +41,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     link_directories(/usr/lib/gcc/x86_64-linux-gnu/15)
   endif()
 elseif(MSVC)
-  add_compile_options(/W3 /DNOMINMAX /permissive- /D_SILENCE_CXX23_DENORM_DEPRECATION_WARNING)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/W3> $<$<COMPILE_LANGUAGE:CXX>:/DNOMINMAX> $<$<COMPILE_LANGUAGE:CXX>:/permissive-> $<$<COMPILE_LANGUAGE:CXX>:/D_SILENCE_CXX23_DENORM_DEPRECATION_WARNING>)
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64|ARM64|arm64")
@@ -442,6 +442,7 @@ if(ENABLE_CUDA)
     src/neural/backends/cuda/layers.cc
     src/neural/backends/cuda/network_cuda.cc
     src/neural/backends/cuda/common_kernels.cu
+    src/neural/backends/cuda/fp16_kernels.cu
   )
 
   if(ENABLE_CUTLASS)

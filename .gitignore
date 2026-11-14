@@ -5,6 +5,7 @@
 .clangd/
 .juggler/
 build/
+build_*
 builddir
 __pycache__/
 .ruff_cache/
