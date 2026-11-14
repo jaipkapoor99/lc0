@@ -241,7 +241,7 @@ class CudaNetwork : public Network {
       throw Exception("Invalid GPU Id: " + std::to_string(gpu_id_));
 
     cudaDeviceProp deviceProp = {};
-    cudaGetDeviceProperties(&deviceProp, gpu_id_);
+    ReportCUDAErrors(cudaGetDeviceProperties(&deviceProp, gpu_id_));
     showDeviceInfo(deviceProp, gpu_id_);
 
     l2_cache_size_ = deviceProp.l2CacheSize;
@@ -275,7 +275,14 @@ class CudaNetwork : public Network {
     constexpr bool fp16 = std::is_same<half, DataType>::value;
     constexpr bool bf16 = std::is_same<__nv_bfloat16, DataType>::value;
 
-    if (fp16) {
+    if (is_bf16) {
+      if (deviceProp.major >= 8) {
+        has_tensor_cores_ = true;
+      } else {
+        throw Exception(
+            "Your GPU doesn't support BF16 (requires Compute Capability >= 8.0)");
+      }
+    } else if (fp16) {
 #if defined(USE_HIP)
       // hipDeviceProp_t.major/minor do not follow CUDA SM numbering, so the SM
       // checks below misfire. Every ROCm GPU lc0 targets (gfx9 CDNA and gfx10/11
@@ -325,10 +332,10 @@ class CudaNetwork : public Network {
                                                 cudaEventDisableTiming));
       ReportCUBLASErrors(cublasCreate(&cublas_));
       ReportCUBLASErrors(cublasSetStream(cublas_, compute_stream_));
-#if !defined(USE_HIP)
-      // The CUBLAS_TENSOR_OP_MATH / CUBLAS_PEDANTIC_MATH enums (a NVIDIA
-      // TF32/tensor-op math-mode toggle and a TU11x workaround) have no hipBLAS
-      // equivalent; let hipBLAS pick its default precision.
+#if !defined(USE_HIP) && CUDART_VERSION < 11010
+      // CUBLAS_TENSOR_OP_MATH was deprecated in CUDA 11.0 while using
+      // CUBLAS_PEDANTIC_MATH was a workaround for a TU11x bug (apparently
+      // fixed in CUDA 11.1) and hipBLAS has no equivalent.
       if (has_tensor_cores_)
         ReportCUBLASErrors(cublasSetMathMode(
             cublas_,
@@ -389,8 +396,9 @@ class CudaNetwork : public Network {
     // ROCm; HIP always takes the cuBLAS attention fallback, so keep this false.
     if (deviceProp.major >= 8 && (fp16 || bf16)) {
       use_fused_mha = options.GetOrDefault<bool>(
-          "fused_mha", file.format().network_format().ffn_activation() !=
-                           pblczero::NetworkFormat::ACTIVATION_RELU_2);
+          "fused_mha",
+          is_bf16 || file.format().network_format().ffn_activation() !=
+                      pblczero::NetworkFormat::ACTIVATION_RELU_2);
     }
 #endif
 
@@ -523,14 +531,39 @@ class CudaNetwork : public Network {
               true, use_gemm_ex);
           convPol->LoadWeights(&head.policy.weights[0], &head.policy.biases[0],
                                scratch_mem_);
-          network_.emplace_back(std::move(convPol));
+            network_.emplace_back(std::move(conv1));
 
-          auto FCPol = std::make_unique<FCLayer<DataType>>(
-              getLastLayer(), head.ip_pol_b.size(), 1, 1, true,
-              ACTIVATION_NONE);
-          FCPol->LoadWeights(&head.ip_pol_w[0], &head.ip_pol_b[0],
-                             scratch_mem_);
-          network_.emplace_back(std::move(FCPol));
+            auto pol_channels = head.policy.biases.size();
+
+            // No relu
+            auto conv2 = std::make_unique<FusedWinogradConvSELayer<DataType>>(
+                getLastLayer(), pol_channels, 8, 8, kNumFilters, ACTIVATION_NONE,
+                true, false, false, 0, use_gemm_ex);
+            conv2->LoadWeights(&head.policy.weights[0], &head.policy.biases[0],
+                               scratch_mem_);
+            network_.emplace_back(std::move(conv2));
+
+            auto policymap = std::make_unique<PolicyMapLayer<DataType>>(
+                getLastLayer(), kNumOutputPolicy, 1, 1, 73 * 8 * 8, false);
+            policymap->LoadWeights(kConvPolicyMap, scratch_mem_);
+
+            network_.emplace_back(std::move(policymap));
+          } else {
+            assert(!attn_body_);  // not supported with attention body
+            auto convPol = std::make_unique<Conv1Layer<DataType>>(
+                resi_last_, head.policy.biases.size(), 8, 8, kNumFilters, act,
+                true, use_gemm_ex);
+            convPol->LoadWeights(&head.policy.weights[0], &head.policy.biases[0],
+                                 scratch_mem_);
+            network_.emplace_back(std::move(convPol));
+
+            auto FCPol = std::make_unique<FCLayer<DataType>>(
+                getLastLayer(), head.ip_pol_b.size(), 1, 1, true,
+                ACTIVATION_NONE);
+            FCPol->LoadWeights(&head.ip_pol_w[0], &head.ip_pol_b[0],
+                               scratch_mem_);
+            network_.emplace_back(std::move(FCPol));
+          }
         }
       }
     }
@@ -604,6 +637,10 @@ class CudaNetwork : public Network {
     }
 
     tensor_mem_size_ = multi_stream_ ? maxSize : 0;
+
+    // Make sure that weight upload has stopped using scratch memory before
+    // compute may use it.
+    ReportCUDAErrors(cudaDeviceSynchronize());
 
     if (!options.GetOrDefault("capture_graphs_onload", true)) {
       return;
@@ -1044,9 +1081,10 @@ class CudaNetwork : public Network {
   std::unique_ptr<InputsOutputs<DataType>> GetInputsOutputs() {
     std::lock_guard<std::mutex> lock(inputs_outputs_lock_);
     if (free_inputs_outputs_.empty()) {
+      constexpr bool is_fp16 = std::is_same<half, DataType>::value;
       return std::make_unique<InputsOutputs<DataType>>(
           max_batch_size_, wdl_, moves_left_, tensor_mem_size_, scratch_size_,
-          !has_tensor_cores_ && std::is_same<half, DataType>::value);
+          !has_tensor_cores_ && is_fp16);
     } else {
       std::unique_ptr<InputsOutputs<DataType>> resource =
           std::move(free_inputs_outputs_.front());
@@ -1152,7 +1190,7 @@ class CudaNetwork : public Network {
              << major << "." << minor << "." << pl;
       }
     }
-    cudaDriverGetVersion(&version);
+    ReportCUDAErrors(cudaDriverGetVersion(&version));
     major = version / 1000;
     minor = (version - major * 1000) / 10;
     pl = version - major * 1000 - minor * 10;
@@ -1263,6 +1301,7 @@ std::unique_ptr<Network> MakeCudaNetwork(const std::optional<WeightsFile>& w,
   const WeightsFile& weights = *w;
   auto nf = weights.format().network_format();
   using NF = pblczero::NetworkFormat;
+
   switch (nf.network()) {
     case NF::NETWORK_CLASSICAL_WITH_HEADFORMAT:
     case NF::NETWORK_SE_WITH_HEADFORMAT:
@@ -1326,8 +1365,7 @@ std::unique_ptr<Network> MakeCudaNetworkAuto(
     const std::optional<WeightsFile>& weights, const OptionsDict& options) {
   int gpu_id = options.GetOrDefault<int>("gpu", 0);
   cudaDeviceProp deviceProp = {};
-  // No error checking here, this will be repeated later.
-  cudaGetDeviceProperties(&deviceProp, gpu_id);
+  ReportCUDAErrors(cudaGetDeviceProperties(&deviceProp, gpu_id));
 
   // Check if the GPU supports FP16 / BF16.
   if (deviceProp.major >= 7 ||
@@ -1339,6 +1377,35 @@ std::unique_ptr<Network> MakeCudaNetworkAuto(
   CERR << "Switching to [" BACKEND_NAME_LC "]...";
   return MakeCudaNetwork<float>(weights, options);
 }
+#if LC0_CUDA_BF16_SUPPORTED
+std::unique_ptr<Network> MakeCudaNetworkBf16(
+    const std::optional<WeightsFile>& weights, const OptionsDict& options) {
+  int gpu_id = options.GetOrDefault<int>("gpu", 0);
+  cudaDeviceProp deviceProp = {};
+  ReportCUDAErrors(cudaGetDeviceProperties(&deviceProp, gpu_id));
+
+  // Check if the GPU supports bfloat16 (Compute Capability >= 8.0).
+#if !defined(USE_HIP)
+  if (deviceProp.major < 8) {
+    CERR << "WARNING: " BACKEND_NAME_LC "-bf16 backend requires " BACKEND_NAME " GPU with Compute Capability >= 8.0 (Ampere or newer). "
+            "Selected GPU has Compute Capability " << deviceProp.major << "." << deviceProp.minor
+         << ". Switching to [" BACKEND_NAME_LC "-fp16]...";
+    return MakeCudaNetwork<half>(weights, options);
+  }
+#endif
+  if (weights) {
+    auto nf = weights->format().network_format();
+    using NF = pblczero::NetworkFormat;
+    if (nf.network() != NF::NETWORK_ATTENTIONBODY_WITH_HEADFORMAT &&
+        nf.network() != NF::NETWORK_ATTENTIONBODY_WITH_MULTIHEADFORMAT) {
+      CERR << "WARNING: The " BACKEND_NAME_LC "-bf16 backend currently only supports transformer networks (BT2/BT3/BT4). "
+              "Switching to [" BACKEND_NAME_LC "-fp16]...";
+      return MakeCudaNetwork<half>(weights, options);
+    }
+  }
+  return MakeCudaNetwork<__nv_bfloat16>(weights, options);
+}
+#endif
 }
 
 REGISTER_NETWORK(BACKEND_NAME_LC "-auto", MakeCudaNetworkAuto, 104)

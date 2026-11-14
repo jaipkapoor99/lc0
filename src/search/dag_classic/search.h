@@ -377,11 +377,11 @@ class SearchWorker {
     }
 
    private:
+    // Collisions are never evaluated, so eval stays null.
     NodeToProcess(const BackupPath& path, uint32_t multivisit,
                   uint32_t max_count)
         : path(path),
           node(std::get<0>(path.back())),
-          eval(std::make_unique<EvalResult>()),
           multivisit(multivisit),
           maxvisit(max_count),
           is_collision(true),
@@ -530,7 +530,6 @@ class SearchWorker {
   PositionHistory history_;
   int number_out_of_order_ = 0;
   const SearchParams& params_;
-  std::unique_ptr<Node> precached_node_;
   const bool moves_left_support_;
   classic::IterationStats iteration_stats_;
   classic::StoppersHints latest_time_manager_hints_;

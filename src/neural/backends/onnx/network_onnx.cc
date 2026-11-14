@@ -308,9 +308,9 @@ InputsOutputs::InputsOutputs(OnnxNetwork* network)
 OnnxNetwork::~OnnxNetwork() {
 #ifdef USE_ONNX_CUDART
   if (provider_ == OnnxProvider::TRT || provider_ == OnnxProvider::CUDA) {
-    ReportCUDAErrors(cudaStreamDestroy(compute_stream_));
-    ReportCUDAErrors(cudaStreamDestroy(upload_stream_));
-    ReportCUDAErrors(cudaStreamDestroy(download_stream_));
+    if (compute_stream_) ReportCUDAErrors(cudaStreamDestroy(compute_stream_));
+    if (upload_stream_) ReportCUDAErrors(cudaStreamDestroy(upload_stream_));
+    if (download_stream_) ReportCUDAErrors(cudaStreamDestroy(download_stream_));
   }
 #endif
 }
@@ -673,6 +673,16 @@ Ort::SessionOptions OnnxNetwork::GetOptions(int threads, int batch_size,
       break;
     }
     case OnnxProvider::TRT: {
+      auto version = OrtGetApiBase()->GetVersionString();
+      std::istringstream iss(version);
+      char dot;
+      int major, minor, patch;
+      iss >> major >> dot >> minor >> dot >> patch;
+      if (major == 1 && minor >= 27) {
+        CERR << "WARNING: onnxruntime 1.27 or newer has a bug with TensorRT "
+                "10 and uses FP32 compute instead of FP16. If you notice bad "
+                "performance, downgrade to onnxruntime 1.26 or earlier.";
+      }
       options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
 
       std::string cache_dir = CommandLine::BinaryDirectory() + "/trt_cache";
@@ -810,8 +820,13 @@ OnnxNetwork::OnnxNetwork(const WeightsFile& file, const OptionsDict& opts,
     CERR << "Latest version of CUDA supported by the driver: "
          << nv_version(driver_version);
     if (driver_version < runtime_version) {
-      throw Exception(
-          "ERROR: The CUDA driver version is older than the runtime version.");
+      if (provider_ == OnnxProvider::TRT) {
+        throw Exception(
+            "ERROR: The CUDA driver version is older than the runtime version. "
+            "TensorRT requires an up-to-date driver.");
+      } else {
+        CERR << "WARNING: The CUDA driver version is older than the runtime version.";
+      }
     }
     cudaDeviceProp deviceProp = {};
     if (!cudaGetDeviceProperties(&deviceProp, gpu_)) {

@@ -158,6 +158,36 @@ void FCLayer<half>::LoadWeights(float* cpuWeight, float* cpuBias,
   }
 }
 
+#if LC0_CUDA_BF16_SUPPORTED
+template <>
+void FCLayer<__nv_bfloat16>::LoadWeights(float* cpuWeight, float* cpuBias,
+                                         void* scratch) {
+  const size_t num_weights =
+      C * H * W * input_->GetC() * input_->GetH() * input_->GetW();
+  const size_t weight_size = sizeof(float) * num_weights;
+  const size_t num_biases = C * H * W;
+  const size_t bias_size = sizeof(float) * num_biases;
+
+  assert(scratch);
+  ReportCUDAErrors(
+      cudaMemcpy(scratch, cpuWeight, weight_size, cudaMemcpyHostToDevice));
+
+  if (nhwc_) {
+    convertNCHWtoNHWC((__nv_bfloat16*)weights_, (float*)scratch, (int)num_biases,
+                      input_->GetC(), (int)num_biases, input_->GetC(),
+                      input_->GetH(), input_->GetW(), 0);
+  } else {
+    copyTypeConverted((__nv_bfloat16*)weights_, (float*)scratch, (int)num_weights, 0);
+  }
+
+  if (cpuBias) {
+    ReportCUDAErrors(
+        cudaMemcpy(scratch, cpuBias, bias_size, cudaMemcpyHostToDevice));
+    copyTypeConverted((__nv_bfloat16*)biases_, (float*)scratch, (int)num_biases, 0);
+  }
+}
+#endif
+
 template <>
 void FCLayer<__nv_bfloat16>::LoadWeights(float* cpuWeight, float* cpuBias,
                                          void* scratch) {
@@ -226,6 +256,32 @@ void FCLayer<half>::Eval(int N, half* output_tensor, const half* input_tensor,
                num_outputs, num_outputs * N, act_, stream);
   }
 }
+
+#if LC0_CUDA_BF16_SUPPORTED
+template <>
+void FCLayer<__nv_bfloat16>::Eval(int N, __nv_bfloat16* output_tensor,
+                                  const __nv_bfloat16* input_tensor,
+                                  const __nv_bfloat16* /*input2*/,
+                                  void* /*scratch*/, size_t /*scratch_size*/,
+                                  cudnnHandle_t /*cudnn*/,
+                                  cublasHandle_t cublas, cudaStream_t stream,
+                                  __nv_bfloat16***) {
+  const int num_outputs = C * H * W;
+  const int num_inputs = input_->GetC() * input_->GetH() * input_->GetW();
+
+  float alpha = 1.0f, beta = 0.0f;
+  ReportCUBLASErrors(cublasGemmEx(
+      cublas, CUBLAS_OP_T, CUBLAS_OP_N, num_outputs, N, num_inputs, &alpha,
+      weights_, CUDA_R_16BF, num_inputs, input_tensor, CUDA_R_16BF, num_inputs,
+      &beta, output_tensor, CUDA_R_16BF, num_outputs, CUBLAS_COMPUTE_32F,
+      CUBLAS_GEMM_DEFAULT));
+
+  if (use_bias_ || (act_ != ACTIVATION_NONE)) {
+    addVectors(output_tensor, biases_, output_tensor, num_outputs * N,
+               num_outputs, num_outputs * N, act_, stream);
+  }
+}
+#endif
 
 template <>
 void FCLayer<__nv_bfloat16>::Eval(int N, __nv_bfloat16* output_tensor,
@@ -409,6 +465,20 @@ void BaseLayer<half>::cublasRowMajorMatrixMul(const half* A, const half* B,
       batchSize, CUDA_R_16F, CUBLAS_GEMM_DEFAULT));
 }
 
+#if LC0_CUDA_BF16_SUPPORTED
+template <>
+void BaseLayer<__nv_bfloat16>::cublasRowMajorMatrixMul(
+    const __nv_bfloat16* A, const __nv_bfloat16* B, __nv_bfloat16* Out, int M,
+    int N, int K, int batchSize, cublasHandle_t cublas) {
+  float floatOne = 1.0f;
+  float floatZero = 0.0f;
+  ReportCUBLASErrors(cublasGemmStridedBatchedEx(
+      cublas, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &floatOne, B, CUDA_R_16BF, N,
+      N * K, A, CUDA_R_16BF, K, K * M, &floatZero, Out, CUDA_R_16BF, N, N * M,
+      batchSize, CUDA_R_32F, CUBLAS_GEMM_DEFAULT));
+}
+#endif
+
 template <>
 void BaseLayer<__nv_bfloat16>::cublasRowMajorMatrixMul(
     const __nv_bfloat16* A, const __nv_bfloat16* B, __nv_bfloat16* Out, int M,
@@ -503,6 +573,21 @@ void Conv1Layer<half>::cublasSpecialMatrixMul(const half* A, const half* B,
       N * K, A, CUDA_R_16F, K, 0, &halfZero, Out, CUDA_R_16F, N, N * M,
       batchSize, CUDA_R_16F, CUBLAS_GEMM_DEFAULT));
 }
+
+#if LC0_CUDA_BF16_SUPPORTED
+template <>
+void Conv1Layer<__nv_bfloat16>::cublasSpecialMatrixMul(
+    const __nv_bfloat16* A, const __nv_bfloat16* B, __nv_bfloat16* Out, int M,
+    int N, int K, int batchSize, cublasHandle_t cublas) {
+  float floatOne = 1.0f;
+  float floatZero = 0.0f;
+
+  ReportCUBLASErrors(cublasGemmStridedBatchedEx(
+      cublas, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &floatOne, B, CUDA_R_16BF, N,
+      N * K, A, CUDA_R_16BF, K, 0, &floatZero, Out, CUDA_R_16BF, N, N * M,
+      batchSize, CUDA_R_32F, CUBLAS_GEMM_DEFAULT));
+}
+#endif
 
 template <>
 void Conv1Layer<__nv_bfloat16>::cublasSpecialMatrixMul(
@@ -1619,6 +1704,18 @@ template class ValueHead<half>;
 template class ValueHead<__nv_bfloat16>;
 template class ValueHead<float>;
 
+#if LC0_CUDA_BF16_SUPPORTED
+template class FCLayer<__nv_bfloat16>;
+template class SELayer<__nv_bfloat16>;
+template class PolicyMapLayer<__nv_bfloat16>;
+template class Conv1Layer<__nv_bfloat16>;
+template class AttentionPolicyHead<__nv_bfloat16>;
+template class EncoderBlock<__nv_bfloat16>;
+template class AttentionBody<__nv_bfloat16>;
+template class EmbeddingLayer<__nv_bfloat16>;
+template class ValueHead<__nv_bfloat16>;
+#endif
+
 // Misc error handling stuff.
 
 const char* CublasGetErrorString(cublasStatus_t status) {
@@ -1643,6 +1740,12 @@ const char* CublasGetErrorString(cublasStatus_t status) {
       return "CUBLAS_STATUS_NOT_SUPPORTED";
     case CUBLAS_STATUS_LICENSE_ERROR:
       return "CUBLAS_STATUS_LICENSE_ERROR";
+#ifdef USE_HIP
+    case HIPBLAS_STATUS_HANDLE_IS_NULLPTR:
+      return "HIPBLAS_STATUS_HANDLE_IS_NULLPTR";
+    case HIPBLAS_STATUS_INVALID_ENUM:
+      return "HIPBLAS_STATUS_INVALID_ENUM";
+#endif
   }
   return "unknown cublas error";
 }
