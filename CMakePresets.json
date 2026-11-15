@@ -30,6 +30,34 @@
         "ENABLE_CUDA": "ON",
         "ENABLE_TESTS": "ON"
       }
+    },
+    {
+      "name": "windows-msvc-cuda",
+      "displayName": "Windows Release (MSVC, C++23, CUDA, CUTLASS)",
+      "description": "Optimized release build on Windows using MSVC, CUDA, and CUTLASS",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-cuda",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_STANDARD": "23",
+        "ENABLE_CUDA": "ON",
+        "ENABLE_CUTLASS": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_BLAS": "OFF"
+      }
+    },
+    {
+      "name": "generic-release",
+      "displayName": "Generic Release (C++23, CPU)",
+      "description": "Standard CPU release build with system default compiler",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/generic-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_STANDARD": "23",
+        "ENABLE_CUDA": "OFF",
+        "ENABLE_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -40,12 +68,34 @@
     {
       "name": "linux-debug",
       "configurePreset": "linux-gcc15-debug"
+    },
+    {
+      "name": "windows-cuda",
+      "configurePreset": "windows-msvc-cuda"
+    },
+    {
+      "name": "generic",
+      "configurePreset": "generic-release"
     }
   ],
   "testPresets": [
     {
       "name": "linux-test",
       "configurePreset": "linux-gcc15-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-test",
+      "configurePreset": "windows-msvc-cuda",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "generic-test",
+      "configurePreset": "generic-release",
       "output": {
         "outputOnFailure": true
       }

@@ -6,6 +6,9 @@ import os
 VERSION_FILE = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "../src/version.inc"
 )
+CMAKE_FILE = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "../CMakeLists.txt"
+)
 VERSION_CONTENT = """
 #define LC0_VERSION_MAJOR {}
 #define LC0_VERSION_MINOR {}
@@ -31,6 +34,20 @@ def set_version(major, minor, patch, postfix=""):
 
     with open(VERSION_FILE, "w") as f:
         f.write(version_inc)
+
+    if os.path.exists(CMAKE_FILE):
+        import re
+
+        with open(CMAKE_FILE, "r") as f:
+            cmake_text = f.read()
+        updated_cmake = re.sub(
+            r"project\(lc0\s+VERSION\s+\d+\.\d+\.\d+",
+            f"project(lc0\n  VERSION {major}.{minor}.{patch}",
+            cmake_text,
+            count=1,
+        )
+        with open(CMAKE_FILE, "w") as f:
+            f.write(updated_cmake)
 
 
 def update(major, minor, patch, postfix=""):

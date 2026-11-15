@@ -35,85 +35,80 @@ Having successfully acquired Lc0 via either of these methods, proceed to the bui
 
 ## Building and running Lc0
 
-Building should be easier now than it was in the past. Please report any problems you have.
+Building Lc0 is straightforward using **CMake** (3.28+) and a **C++23** capable compiler (GCC 15+, Clang 18+, or MSVC from Visual Studio 2022 17.8+).
 
-Building lc0 requires the Meson build system and at least one backend library for evaluating the neural network, as well as a few libraries. If your system already has these libraries installed, they will be used; otherwise Meson will generate its own copy (a "subproject"), which in turn requires that git is installed (yes, separately from cloning the actual lc0 repository). Meson also requires python and Ninja.
+Dependencies (Abseil, Eigen, CUTLASS, ZLIB, and GoogleTest) are automatically managed via CMake's `FetchContent` or discovered from your system if installed.
 
-Backend support includes (in theory) any CBLAS-compatible library for CPU usage, but OpenBLAS or Intel's DNNL are the main ones. For GPUs, the following are supported: CUDA (with optional cuDNN), HIP/ROCm for AMD GPUs, various flavors of onnxruntime, and Apple's Metal Performance Shaders. There is also experimental SYCL support for AMD and Intel GPUs.
+### Quick Start with CMake Presets
 
-Finally, lc0 requires a compiler supporting C++20. Minimal versions tested are g++ v10.0, clang v12.0 and Visual Studio 2019 version 16.11.
+Lc0 provides unified presets in `CMakePresets.json`:
 
-Given those basics, the OS and backend specific instructions are below.
-
-### Linux
-
-#### Generic
-
-1. Install backend (also read the detailed instructions in later sections):
-    - If you want to use NVidia graphics cards Install [CUDA](https://developer.nvidia.com/cuda-zone) (and optionally [cuDNN](https://developer.nvidia.com/cudnn)).
-    - If you want to use AMD graphics cards install [ROCm](https://rocm.docs.amd.com/) and build with the HIP backend.
-    - If you want to use Intel graphics cards you can try SYCL.
-    - if you want BLAS install either OpenBLAS or DNNL.
-2. Install ninja build (`ninja-build`), meson, and (optionally) gtest (`libgtest-dev`).
-3. Go to `lc0/`
-4. Run `./build.sh`
-5. `lc0` will be in `lc0/build/release/` directory
-6. Download a [neural network](https://lczero.org/play/networks/bestnets/) in the same directory as the binary (no need to unpack it).
-
-If you want to build with a different compiler, pass the `CC` and `CXX` environment variables:
 ```shell
-CC=clang CXX=clang++ ./build.sh
+# Linux (GCC 15, C++23, CUDA/CUTLASS, Native optimizations)
+cmake --preset linux-gcc15-release
+cmake --build --preset linux-release -j
+
+# Windows (MSVC, C++23, CUDA, CUTLASS)
+cmake --preset windows-msvc-cuda
+cmake --build --preset windows-cuda -j
+
+# Generic CPU Release (C++23, BLAS / Eigen fallback)
+cmake --preset generic-release
+cmake --build --preset generic -j
 ```
 
-#### Ubuntu 20.04
+### Manual Configuration
 
-For Ubuntu 20.04 you need meson, ninja and gcc-10 before performing the steps above. The following should work:
-```shell
-apt-get update
-apt-get -y install git python3-pip gcc-10 g++-10 zlib1g zlib1g-dev
-pip3 install meson
-pip3 install ninja
-CC=gcc-10 CXX=g++-10 INSTALL_PREFIX=~/.local ./build.sh
-```
+#### Linux
 
-Make sure that `~/.local/bin` is in your `PATH` environment variable. You can now type `lc0 --help` and start.
+1. Install dependencies:
+   - C++23 compiler: GCC 15 (`gcc-15`, `g++-15`) or Clang 18+
+   - CMake 3.28+ and Ninja: `apt-get install -y cmake ninja-build`
+   - Optional: NVIDIA CUDA Toolkit (v12.x or v13.x) for GPU evaluation, `libopenblas-dev` for CPU BLAS
+2. Configure and build:
+   ```shell
+   cmake -B build/release -G Ninja \
+     -DCMAKE_BUILD_TYPE=Release \
+     -DCMAKE_CXX_STANDARD=23 \
+     -DENABLE_CUDA=ON \
+     -DENABLE_CUTLASS=ON \
+     -DENABLE_TESTS=ON
+   cmake --build build/release -j $(nproc)
+   ```
+3. Run tests:
+   ```shell
+   ctest --test-dir build/release --output-on-failure
+   ```
+4. Download a [neural network weights file](https://lczero.org/play/networks/bestnets/) and place it in the same directory as the executable.
 
-### Windows
+#### Windows
 
-Here are the brief instructions for CUDA/cuDNN, for details and other options see `windows-build.md` and the instructions in the following sections.
+1. Install Visual Studio 2022 (version 17.8 or newer) with C++ Desktop Development and CMake tools.
+2. Install [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) (v12.0 or newer).
+3. Open a Developer PowerShell / Command Prompt and run:
+   ```powershell
+   cmake -B build -G "Visual Studio 17 2022" -A x64 `
+     -DCMAKE_BUILD_TYPE=Release `
+     -DCMAKE_CXX_STANDARD=23 `
+     -DENABLE_CUDA=ON `
+     -DENABLE_CUTLASS=ON `
+     -DENABLE_TESTS=ON
+   cmake --build build --config Release --parallel $env:NUMBER_OF_PROCESSORS
+   ```
+4. The executable will be at `build/Release/lc0.exe`.
 
-1. Install Microsoft Visual Studio (2019 version 16.11 or later)
-2. Install [CUDA](https://developer.nvidia.com/cuda-zone)
-3. (Optionally install [cuDNN](https://developer.nvidia.com/cudnn)).
-4. Install Python3 if you didn't install it with Visual Studio.
-5. Install Meson: `pip3 install --upgrade meson`
-6. If `CUDA_PATH` is not set (run the `set` command to see the full list of variables), edit `build.cmd` and set the `CUDA_PATH` with your CUDA directory
-* If you also want cuDNN, set `CUDNN_PATH` with your cuDNN directory (not needed if it is the same with `CUDA_PATH`).
+#### macOS (Apple Silicon)
 
-7. Run `build.cmd`. It will ask permission to delete the build directory, then generate MSVS project and pause.
-
-Then either:
-
-8. Hit `Enter` to build it.
-9. Resulting binary will be `build/lc0.exe`
-
-Or.
-
-8. Open generated solution `build/lc0.sln` in Visual Studio and build it yourself.
-
-### Mac
-
-You will need xcode and python3 installed. Then you need to install some required packages through Terminal:
-
-1. Install meson: `pip3 install meson`
-2. Install ninja: `pip3 install ninja`
-
-Now download the lc0 source, if you haven't already done so, following the instructions earlier in the page.
-
-3. Go to the lc0 directory.
-4. Run `./build.sh -Dgtest=false`
-
-The compiled Lc0 will be in `build/release` 
+1. Install Xcode Command Line Tools, CMake, and Ninja (`brew install cmake ninja`).
+2. Configure and build:
+   ```shell
+   cmake -B build -G Ninja \
+     -DCMAKE_BUILD_TYPE=Release \
+     -DCMAKE_CXX_STANDARD=23 \
+     -DENABLE_CUDA=OFF \
+     -DENABLE_TESTS=ON
+   cmake --build build --parallel $(sysctl -n hw.ncpu)
+   ``` 
 
 Starting with v0.32.0, we are also offering a pre-compiled version that can be downloaded from the [release page](https://github.com/LeelaChessZero/lc0/releases).
 

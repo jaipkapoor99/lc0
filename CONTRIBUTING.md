@@ -16,17 +16,16 @@ guidelines for contributing to the codebase.
 * Familiarize yourself with the developer documentation at
   <https://lczero.org/dev/>.
 
-We use the [Meson](https://mesonbuild.com/) build system.
+We use the [CMake](https://cmake.org/) (3.28+) build system with Ninja.
 
-* In Linux, using `builddir/` is recommended for development
-  (`meson setup builddir/`), as VSCode recognizes it and all the development and
-  debugging tools work there (ask in Discord if you have issues).
-  * In the `builddir/`, run `ninja lc0` (which is faster than just `ninja`). Run
-    `ninja test` to run the tests.
-* In Windows, `meson setup build/debug` generates a Visual Studio solution that
-  can be used for development.
-* Check `meson_options.txt` for the available build options (to use them, pass
-  `-D<name>=<value>` to `meson setup`).
+* In Linux, using `build/` or CMake presets is recommended:
+  * Configure: `cmake --preset linux-release` or `cmake -B build -DCMAKE_BUILD_TYPE=Release`
+  * Build: `cmake --build --preset linux-release` or `cmake --build build -j`
+  * Test: `ctest --preset linux-test` or `ctest --test-dir build --output-on-failure`
+* In Windows, configure with Ninja/MSVC or Visual Studio:
+  * Configure: `cmake -B build -G "Visual Studio 17 2022" -A x64` or `cmake --preset windows-cuda`
+  * Build: `cmake --build build --config Release -j`
+* Check [CMakeLists.txt](CMakeLists.txt) and [CMakePresets.json](CMakePresets.json) for available build options (e.g. `-DENABLE_CUDA=ON`, `-DENABLE_CUTLASS=ON`, `-DENABLE_TESTS=ON`).
 
 ## Sending Pull Requests
 
@@ -76,12 +75,10 @@ and the merged branch if you have any.
 
 ## C++ Standard and Libraries
 
-* We use most C++20 features. However, supported compilers are GCC 10 and clang
-  10, so some features may not be available.
-* We use protocol buffers. However, we don't use any external library for it,
-  but rather generate the code from `.proto` files using the script in
-  `scripts/`.
-* Since v0.32, we use Abseil (`absl::`).
+* We use modern C++23. Supported compilers are GCC 15+, Clang 18+, and MSVC (Visual Studio 2022 17.8+).
+* We use protocol buffers. In-tree protobuf headers are generated via `scripts/compile_proto.py` during CMake configure/build.
+* We use Abseil (`absl::`), managed via FetchContent or system libraries.
+* Python code is formatted and linted with `ruff` and type-checked with `pyrefly`.
 * Use `CERR` for logging (goes to stderr and log), or `LOGFILE` (goes to log
   file only).
 * Writing tests is encouraged. We use `gtest`/`gmock` for unit tests. Tests are

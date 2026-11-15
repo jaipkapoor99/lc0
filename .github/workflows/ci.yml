@@ -142,8 +142,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DENABLE_TESTS=OFF \
-            -DENABLE_CUDA=OFF \
-            -DENABLE_METAL=OFF
+            -DENABLE_CUDA=OFF
 
       - name: Build lc0
         run: |
