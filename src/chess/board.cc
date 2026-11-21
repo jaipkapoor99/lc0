@@ -38,7 +38,9 @@
 
 #include "utils/exception.h"
 
-#if !defined(NO_PEXT) && (defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__))
+#if !defined(NO_PEXT) && \
+    (defined(_M_IX86) || defined(_M_X64) || \
+     ((defined(__i386__) || defined(__x86_64__)) && defined(__BMI2__)))
 // Include header for pext instruction.
 #include <immintrin.h>
 #else
