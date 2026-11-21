@@ -124,7 +124,7 @@ CUDA can be downloaded and installed from <https://developer.nvidia.com/cuda-dow
 
 Lc0 can also run on CPU using OpenBLAS/Accelerate (`-DENABLE_BLAS=ON`) or the built-in Eigen and handcrafted `trivial` evaluators (`-DENABLE_BLAS=OFF`). On macOS, Apple's Accelerate framework is used automatically when `ENABLE_BLAS=ON`.
 
-*Note*: Other experimental/legacy backend sources (`dx`, `metal`, `onednn`, `onnx`, `opencl`, `sycl`, `xla`) remain in `src/neural/backends/` for reference, though the modern CMake build currently targets CUDA/CUTLASS and BLAS/Eigen/CPU.
+*Note*: Additional non-NVIDIA GPU/NPU backend sources (`onnx` for DirectML/CoreML/ROCm/MIGraphX, `metal` for Apple Silicon GPU, and `hip_compat.h` in `cuda` for AMD ROCm/HIP) remain in `src/neural/backends/` alongside the modern CMake `CUDA`/`CUTLASS` (Transformer-only) and `BLAS`/`Eigen`/CPU backends.
 
 ## Getting help
 
@@ -159,8 +159,8 @@ along with Leela Chess.  If not, see <http://www.gnu.org/licenses/>.
 
 ### Additional permission under GNU GPL version 3 section 7
 
-_The source files of Lc0 with the exception of the BLAS, OpenCL and SYCL
-backends (all files in the `blas`, `opencl` and `sycl` sub-directories) have
+_The source files of Lc0 with the exception of the BLAS
+backend (all files in the `blas` sub-directory) have
 the following additional permission, as allowed under GNU GPL version 3
 section 7:_
 

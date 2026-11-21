@@ -36,10 +36,6 @@
 #include "neural/tables/policy_map.h"
 #include "utils/numa.h"
 
-#ifdef USE_DNNL
-#include <omp.h>
-#endif
-
 namespace lczero {
 namespace {
 
@@ -236,11 +232,7 @@ BlasComputation<use_eigen>::BlasComputation(
       ffn_activation_(ffn_activation),
       policy_head_(policy_head),
       value_head_(value_head),
-      network_(network) {
-#ifdef USE_DNNL
-  omp_set_num_threads(threads);
-#endif
-}
+      network_(network) {}
 
 template <typename T>
 using EigenMatrixMap =
@@ -1074,25 +1066,6 @@ BlasNetwork<use_eigen>::BlasNetwork(const WeightsFile& file,
     CERR << "BLAS vendor: OpenBLAS.";
     CERR << "OpenBLAS [" << config << "].";
     CERR << "OpenBLAS found " << num_procs << " " << core_name << " core(s).";
-#endif
-
-#ifdef USE_MKL
-    mkl_set_num_threads(threads_);
-    CERR << "BLAS vendor: MKL.";
-    constexpr int len = 256;
-    char versionbuf[len];
-    mkl_get_version_string(versionbuf, len);
-    CERR << "MKL " << versionbuf << ".";
-    MKLVersion version;
-    mkl_get_version(&version);
-    CERR << "MKL platform: " << version.Platform
-         << ", processor: " << version.Processor << ".";
-#endif
-
-#ifdef USE_DNNL
-    const dnnl_version_t* ver = dnnl_version();
-    CERR << "BLAS functions from DNNL version " << ver->major << "."
-         << ver->minor << "." << ver->patch;
 #endif
 
 #ifdef USE_ACCELERATE

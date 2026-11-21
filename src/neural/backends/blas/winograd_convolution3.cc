@@ -152,49 +152,6 @@ void WinogradConvolution3<false>::Sgemm(const size_t batch_size,
                                         const float* weights,
                                         const size_t input_channels,
                                         const size_t output_channels) {
-#ifdef USE_MKL
-
-  /*
-   void cblas_sgemm_batch (const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE*
-   transa_array, const CBLAS_TRANSPOSE* transb_array, const MKL_INT* m_array,
-   const MKL_INT* n_array, const MKL_INT* k_array, const float* alpha_array,
-   const float **a_array, const MKL_INT* lda_array, const float **b_array, const
-   MKL_INT* ldb_array, const float* beta_array, float **c_array, const MKL_INT*
-   ldc_array, const MKL_INT group_count, const MKL_INT* group_size);
-   */
-
-  CBLAS_TRANSPOSE transA = CblasNoTrans;
-  CBLAS_TRANSPOSE transB = CblasNoTrans;
-  MKL_INT m_array = output_channels;
-  MKL_INT n_array = batch_size * kTiles;
-  MKL_INT k_array = input_channels;
-  float alpha_array = 1.0;
-  const float* a_array[kWinogradTile];
-  MKL_INT lda_array = output_channels;
-  const float* b_array[kWinogradTile];
-  MKL_INT ldb_array = input_channels;
-  float* c_array[kWinogradTile];
-  MKL_INT ldc_array = output_channels;
-  float beta_array = 0.0;
-  MKL_INT groupSize = kWinogradTile;
-
-  for (auto b = 0; b < kWinogradTile; b++) {
-    auto offset_u = b * output_channels * input_channels;
-    auto offset_v = b * batch_size * input_channels * kTiles;
-    auto offset_m = b * batch_size * output_channels * kTiles;
-
-    a_array[b] = &weights[offset_u];
-    b_array[b] = &V_[offset_v];
-    c_array[b] = &M_[offset_m];
-  }
-
-  cblas_sgemm_batch(CblasColMajor, &transA, &transB, &m_array, &n_array,
-                    &k_array, &alpha_array, a_array, &lda_array, b_array,
-                    &ldb_array, &beta_array, c_array, &ldc_array, 1,
-                    &groupSize);
-
-#else
-
   for (size_t b = 0; b < kWinogradTile; b++) {
     auto offset_u = b * output_channels * input_channels;
 
@@ -221,7 +178,6 @@ void WinogradConvolution3<false>::Sgemm(const size_t batch_size,
                 &M_[offset_m],               // M
                 (int)output_channels);       // ldM
   }
-#endif
 }
 #endif
 

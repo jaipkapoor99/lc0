@@ -106,9 +106,8 @@ endfunction()
 
 generate_lc0_proto("proto/net.proto" PROTO_NET_H)
 generate_lc0_proto("proto/onnx.proto" PROTO_ONNX_H)
-generate_lc0_proto("proto/hlo.proto" PROTO_HLO_H)
 
-set(ALL_PROTO_HEADERS ${PROTO_NET_H} ${PROTO_ONNX_H} ${PROTO_HLO_H})
+set(ALL_PROTO_HEADERS ${PROTO_NET_H} ${PROTO_ONNX_H})
 add_custom_target(generate_proto_headers DEPENDS ${ALL_PROTO_HEADERS})
 
 # ------------------------------------------------------------------------------
@@ -255,10 +254,6 @@ set(LC0_CORE_SOURCES
   src/neural/onnx/adapters.cc
   src/neural/onnx/builder.cc
   src/neural/onnx/converter.cc
-  src/neural/xla/hlo_builder.cc
-  src/neural/xla/onnx2hlo.cc
-  src/neural/xla/print_hlo.cc
-  src/neural/xla/xla_tensor.cc
   src/tools/backendbench.cc
   src/tools/benchmark.cc
   src/tools/describenet.cc
@@ -459,7 +454,6 @@ if(ENABLE_CUDA)
     src/neural/backends/cuda/layers.cc
     src/neural/backends/cuda/network_cuda.cc
     src/neural/backends/cuda/common_kernels.cu
-    src/neural/backends/cuda/fp16_kernels.cu
   )
 
   if(ENABLE_CUTLASS)

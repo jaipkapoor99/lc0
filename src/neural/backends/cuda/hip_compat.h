@@ -38,13 +38,7 @@
 #include <hip/library_types.h>
 #include <hipblas/hipblas.h>
 
-// fp16_kernels.cu and the fp16 bodies in winograd_helper.inc gate their device
-// code on HAS_FP16_SUPPORT. The NVIDIA build defines it only for compute
-// capability >= 5.3, where native fp16 arithmetic exists. Every AMD GPU that ROCm
-// targets has native fp16 (GCN 5.0 / gfx900 and newer), so define it
-// unconditionally here. Without it those fp16 SE / fused conv-transform kernels
-// would compile to empty bodies and leave their output uninitialized.
-#define HAS_FP16_SUPPORT 1
+// Every AMD GPU that ROCm targets has native fp16 and bf16 support.
 #define LC0_CUDA_BF16_SUPPORTED 1
 
 // Deliberately report a pre-11.0 CUDA runtime so every `CUDART_VERSION >= 11000`

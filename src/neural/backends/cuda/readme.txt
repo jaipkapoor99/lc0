@@ -1,14 +1,13 @@
-Native CUDA / CUTLASS backend for lc0. Brief description of core files:
+Native Transformer-only CUDA / HIP / CUTLASS backend for lc0. Brief description of core files:
 
 1. network_cuda.cc   -> Implementation of CudaNetwork, backend factory, and engine registration (cuda, cuda-fp16, cuda-bf16).
-2. layers.cc         -> Neural network layer implementations (Convolution, FullyConnected, LayerNorm, MultiHeadAttention, etc.).
+2. layers.cc         -> Neural network layer implementations (AttentionBody, EncoderBlock, AttentionPolicyHead, ValueHead, EmbeddingLayer, FCLayer, PolicyMapLayer).
 3. layers.h          -> Header file for layer classes and base layer abstractions.
 4. kernels.h         -> Function declarations for device CUDA kernels.
-5. common_kernels.cu -> Core CUDA kernels (FP32/FP16 transforms, activations, embeddings, policy maps).
-6. fp16_kernels.cu   -> Half-precision FP16 device kernels and optimized output transforms.
-7. cutlass_kernels.cu-> NVIDIA CUTLASS accelerated fused multi-head attention (FMHA) kernels.
-8. cuda_common.h     -> CUDA device error checking, memory management, and stream abstractions.
-9. hip_compat.h      -> ROCm / HIP compatibility mappings for AMD GPU interoperability.
+5. common_kernels.cu -> Core CUDA kernels (FP32/FP16/BF16 transforms, activations, LayerNorm, Softmax, embeddings, policy maps).
+6. cutlass_kernels.cu-> NVIDIA CUTLASS accelerated fused multi-head attention (FMHA) kernels.
+7. cuda_common.h     -> CUDA device error checking, memory management, and stream abstractions.
+8. hip_compat.h      -> ROCm / HIP compatibility mappings for AMD GPU interoperability.
 
 High level overview:
 The network is composed of layer objects executed sequentially. GEMM operations are accelerated via cuBLAS and CUTLASS, with elementwise and custom operations running on optimized native CUDA kernels.

@@ -10,9 +10,6 @@ guidelines for contributing to the codebase.
 * All contributors are encouraged to join our Discord server at
   <https://lc0.org/chat>.
 * Refer to [README.md](README.md) for building and running instructions.
-  * The protobufs that are shared with the training code are located in a
-    separate repository. Don't forget to run `git submodule update --init` to
-    fetch them.
 * Familiarize yourself with the developer documentation at
   <https://lczero.org/dev/>.
 

@@ -46,8 +46,6 @@
 
 #include "utils/fp16_utils.h"
 
-using cudnnHandle_t = void*;
-
 #if !defined(USE_HIP) && CUBLAS_VER_MAJOR < 11
 #define CUBLAS_PEDANTIC_MATH CUBLAS_DEFAULT_MATH
 #endif
@@ -56,19 +54,6 @@ namespace lczero {
 namespace NS_BACKEND {
 
 static constexpr int kNumOutputPolicy = 1858;
-
-// max supported filter count for fast path
-// TODO: extend it to cover bigger networks!
-// (We are limited by no of registers per thread)
-static constexpr int kMaxResBlockFusingChannels = 384;  // limit on num_filters
-static constexpr int kMaxResBlockFusingSeKFp16Ampere =
-    512;  // (use a different kernel with reduced register pressure)
-static constexpr int kMaxResBlockFusingSeK =
-    128;  // limit on (num_filters / se_ratio)
-static constexpr int kMaxResBlockFusingSeFp16AmpereSmem =
-    72 * kMaxResBlockFusingSeKFp16Ampere *
-    sizeof(half);  // shared memory used by the special
-                   // kernel
 
 void CublasError(cublasStatus_t status, const char* file, const int& line);
 void CudaError(cudaError_t status, const char* file, const int& line);
