@@ -114,68 +114,17 @@ Starting with v0.32.0, we are also offering a pre-compiled version that can be d
 
 ### CUDA
 
-CUDA can be downloaded and installed following the instructions in from <https://developer.nvidia.com/cuda-downloads>. The build in most cases will pick it up with no further action. However if the cuda compiler (`nvcc`) is not found you can call the build like this: `PATH=/usr/local/cuda/bin:$PATH ./build.sh`, replacing the path with the correct one for `nvcc`.
+CUDA can be downloaded and installed from <https://developer.nvidia.com/cuda-downloads>. CMake's `enable_language(CUDA)` and `FindCUDAToolkit` will automatically detect `nvcc` and cuBLAS. If `nvcc` is not on your `PATH`, pass `-DCMAKE_CUDA_COMPILER=/path/to/nvcc` to `cmake`.
 
-*Note* that CUDA uses the system compiler and stops if it doesn't recognize the version, even if newer. This is more of an issue with new Linux versions, but you can get around with the `nvcc_ccbin` build option to specify a different compiler just for cuda. As an example, adding `-Dnvcc_ccbin=g++-11` to the build command line will use g++-11 with cuda instead of the system compiler.
+- Target GPU architecture defaults to `native` (`CMAKE_CUDA_ARCHITECTURES=native`) for peak SASS performance. Override with e.g. `-DCMAKE_CUDA_ARCHITECTURES=89` or `120` when cross-compiling.
+- CUTLASS fused multi-head attention (FMHA) is enabled by default (`-DENABLE_CUTLASS=ON`).
+- Available runtime backends: `cuda-auto`, `cuda`, `cuda-fp16`, and `cuda-bf16` (for Ampere / Blackwell GPUs).
 
-### ONNX
+### BLAS / CPU
 
-Lc0 offers several ONNX based backends, namely onnx-cpu, onnx-cuda, onnx-trt, onnx-rocm and on Windows onnx-dml, utilizing the execution providers offered by onnxruntime.
+Lc0 can also run on CPU using OpenBLAS/Accelerate (`-DENABLE_BLAS=ON`) or the built-in Eigen and handcrafted `trivial` evaluators (`-DENABLE_BLAS=OFF`). On macOS, Apple's Accelerate framework is used automatically when `ENABLE_BLAS=ON`.
 
-Some Linux systems are starting to offer onnxruntime packages, so after installing this there is a good chance the Lc0 build will pick it up with no further action required. Otherwise you can set the `onnx_libdir` and `onnx_include` build options to point to the onnxruntime libraries and include directories respectively. The same options are used if you unpack a package downloaded from <https://github.com/microsoft/onnxruntime/releases>.
-
-For Windows, we offer pre-compiled packages for onnx-dml and onnx-trt, see the included README for installation instructions.
-
-### SYCL
-
-*Note* that SYCL support is new in v0.32.0 and as such is still considered experimental.
-
-You will need the Intel "oneAPI DPC++/C++ Compiler", "DPC++ Compatibility Tool" and (for an Intel GPU) "oneAPI Math Kernel Library (oneMKL)" or (for an AMD GPU) hipBLAS.
-
-The Intel tools can be found in either the "oneAPI Base Toolkit" or "C++ Essentials" packages that can be downloaded from
-<https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html>, while hipBLAS can be downloaded from
-<https://rocm.docs.amd.com/projects/hipBLAS/en/latest/>
-
-The compiler for C code is icx and for C++ code is icx on Windows but icpx on Linux.
-
-To build Lc0 with SYCL you need to set the `sycl` build option using `-Dsycl=l0` (that is el zero) for an Intel GPU or `-Dsycl=amd` for (you guessed it) an AMD GPU.
-
-You may also have to set the `dpct_include` option to point to the DPC++ Compatibility Tool includes, the `onemkl_include` similarly for the oneMKL includes, or `hip_libdirs` and `hip_include` to the AMD HIP libraries and includes respectively.
-
-On Linux, a typical session would go like this:
-```shell
-. /opt/intel/oneapi/setvars.sh --include-intel-llvm
-CC=icx CXX=icpx AR=llvm-ar ./build.sh release -Dgtest=false -Dsycl=l0
-```
-The first line is to initialize the build environment and is only needed once per session, while the build line may need modification as described above.
-
-On windows you will have to build using `ninja`, this is provided by Visual Studio if you install the CMake component. We provide a `build-sycl.cmd` script that should build just fine for an Intel GPU. This script has not yet been tested with and AMD GPU, some editing will be required.
-
-You can also install the [oneAPI DPC++/C++ Compiler Runtime](https://www.intel.com/content/www/us/en/developer/articles/tool/compilers-redistributable-libraries-by-version.html) so you can run Lc0 without needing to initialize the build environment every time.
-
-### HIP (ROCm)
-
-The `hip`, `hip-fp16` and `hip-auto` backends run lc0's own CUDA NN-backend kernels (the cuBLAS + custom-kernel path) on AMD GPUs by compiling them with `hipcc`, so AMD users get a first-class ROCm path without the SYCL/DPC++ toolchain. This is distinct from the SYCL backend above (a different toolchain) and from `onnx-rocm` (which runs the network inside onnxruntime rather than lc0's own kernels). cuDNN/MIOpen and the optional CUTLASS fused-MHA are not used; the cuBLAS attention fallback runs in their place.
-
-You will need a [ROCm](https://rocm.docs.amd.com/) installation providing `hipcc` and hipBLAS. Enable the backend with `-Dhip=true`. The target GPU architecture is taken from `-Damd_gfx` (e.g. `-Damd_gfx=gfx90a`); if it is omitted, the first architecture reported by `rocm_agent_enumerator` is used, which needs meson 1.2.0 or newer. There is no default architecture: when nothing can be detected the build stops and asks for an explicit `-Damd_gfx`, rather than guessing an architecture the machine may not have. Use `hip_libdirs` and `hip_include` if the ROCm libraries and headers are not in the default search path. lc0's HIP build links the kernels objects (built by `hipcc`) into a non-LTO host build, so pass `-Db_lto=false`.
-
-A typical session on Linux:
-```shell
-meson setup build-hip -Dhip=true -Damd_gfx=gfx90a \
-  -Dplain_cuda=false -Dcudnn=false -Dcutlass=false -Dnvcc=false \
-  -Dgtest=true -Dblas=true -Db_lto=false \
-  -Dhip_libdirs=/opt/rocm/lib -Dhip_include=/opt/rocm/include
-ninja -C build-hip
-```
-Then select the backend at runtime with `--backend=hip` (or `hip-fp16` for the half-precision path). The HIP backends have been validated on Linux with ROCm on gfx90a (CDNA2) and gfx1100 (RDNA3).
-
-### BLAS
-
-Lc0 can also run (a bit slow) on CPU, using matrix multiplication functions from a BLAS library. By default OpenBLAS is used if available as it seems to offer good performance on a wide range of processors. If your system doesn't offer an OpenBLAS package (e.g. `libopenblas-dev`), or you have a recent processor you can get DNNL from [here](<https://github.com/uxlfoundation/oneDNN/releases/v2.2>). To use DNNL you have to pass `-Ddnnl=true` to the build and specify the directory where it was installed using the `-Ddnnl_dir=` option. For macs, the Accelerate library will be used.
-
-If the "Intel Implicit SPMD Program Compiler" (`ispc`) is [installed](<https://ispc.github.io/downloads.html>), some performance critical functions will use vectorized code for faster execution. 
-
-*Note* that Lc0 is not able to control the number of threads with all BLAS libraries. Some libraries try to exploit cores aggressively, in which case it may be best to leave the threads set to the default (i.e. automatic) setting.
+*Note*: Other experimental/legacy backend sources (`dx`, `metal`, `onednn`, `onnx`, `opencl`, `sycl`, `xla`) remain in `src/neural/backends/` for reference, though the modern CMake build currently targets CUDA/CUTLASS and BLAS/Eigen/CPU.
 
 ## Getting help
 

@@ -40,10 +40,6 @@
 #include <omp.h>
 #endif
 
-#ifdef USE_ISPC
-#include "activation_ispc.h"
-#endif
-
 namespace lczero {
 namespace {
 
@@ -396,12 +392,6 @@ void BlasComputation<use_eigen>::ForwardEncoderLayer(
   float* QK = &encoder_buffer4[0];
   for (size_t h = 0; h < batch_size * heads * kSquares * kSquares;
        h += kSquares) {
-#if defined(USE_ISPC)
-    if (!use_eigen) {
-      ispc::SoftmaxActivation(kSquares, QK + h, QK + h);
-      continue;
-    }
-#endif
     SoftmaxActivation(kSquares, QK + h, QK + h);
   }
 

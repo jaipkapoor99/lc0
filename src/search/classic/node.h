@@ -124,7 +124,13 @@ class Edge_Iterator;
 template <bool is_const>
 class VisitedNode_Iterator;
 
+#if defined(__i386__) || defined(_M_IX86) || \
+    ((defined(__arm__) || defined(_M_ARM)) && !defined(__aarch64__) && \
+     !defined(_M_AMD64))
+class Node {
+#else
 class alignas(64) Node {
+#endif
  public:
   using Iterator = Edge_Iterator<false>;
   using ConstIterator = Edge_Iterator<true>;

@@ -19,11 +19,11 @@ guidelines for contributing to the codebase.
 We use the [CMake](https://cmake.org/) (3.28+) build system with Ninja.
 
 * In Linux, using `build/` or CMake presets is recommended:
-  * Configure: `cmake --preset linux-release` or `cmake -B build -DCMAKE_BUILD_TYPE=Release`
+  * Configure: `cmake --preset linux-gcc15-release` or `cmake -B build -DCMAKE_BUILD_TYPE=Release`
   * Build: `cmake --build --preset linux-release` or `cmake --build build -j`
   * Test: `ctest --preset linux-test` or `ctest --test-dir build --output-on-failure`
 * In Windows, configure with Ninja/MSVC or Visual Studio:
-  * Configure: `cmake -B build -G "Visual Studio 17 2022" -A x64` or `cmake --preset windows-cuda`
+  * Configure: `cmake -B build -G "Visual Studio 17 2022" -A x64` or `cmake --preset windows-msvc-cuda`
   * Build: `cmake --build build --config Release -j`
 * Check [CMakeLists.txt](CMakeLists.txt) and [CMakePresets.json](CMakePresets.json) for available build options (e.g. `-DENABLE_CUDA=ON`, `-DENABLE_CUTLASS=ON`, `-DENABLE_TESTS=ON`).
 

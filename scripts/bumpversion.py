@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 
 VERSION_FILE = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "../src/version.inc"
@@ -36,13 +37,11 @@ def set_version(major, minor, patch, postfix=""):
         f.write(version_inc)
 
     if os.path.exists(CMAKE_FILE):
-        import re
-
         with open(CMAKE_FILE, "r") as f:
             cmake_text = f.read()
         updated_cmake = re.sub(
-            r"project\(lc0\s+VERSION\s+\d+\.\d+\.\d+",
-            f"project(lc0\n  VERSION {major}.{minor}.{patch}",
+            r"(project\(lc0\s+VERSION\s+)\d+\.\d+\.\d+",
+            rf"\g<1>{major}.{minor}.{patch}",
             cmake_text,
             count=1,
         )

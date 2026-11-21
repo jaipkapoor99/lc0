@@ -20,7 +20,7 @@
 */
 
 // Single CUDA->HIP/ROCm compatibility shim for the cuda backend. It is
-// force-included into every HIP translation unit by the meson -Dhip build and
+// force-included into every HIP translation unit when building with USE_HIP and
 // is pulled in by cuda_common.h under USE_HIP, so the rest of the backend keeps
 // its CUDA spelling. The NVIDIA build never sees this file.
 #pragma once

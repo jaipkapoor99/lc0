@@ -242,6 +242,6 @@ inline std::string Move::ToString(bool is_chess960) const {
          (is_promotion() ? promotion().ToString(false) : "");
 }
 
-using MoveList = absl::InlinedVector<Move, 256>;
+using MoveList = absl::InlinedVector<Move, 64>;
 
 }  // namespace lczero

@@ -39,7 +39,7 @@ class Evaluator {
   // Run before each batch before any Gather.
   void Reset(const PlayerOptions& player);
   // Run for each tree.
-  virtual void Gather(classic::NodeTree* tree, MoveList moves) = 0;
+  virtual void Gather(classic::NodeTree* tree, const MoveList& moves) = 0;
   // Run once between Gather and Move.
   void Run();
   // Run for each tree in the same order as Gather.

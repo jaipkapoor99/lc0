@@ -44,13 +44,11 @@ jobs:
   # Tier 1 Primary Development Engine: Ubuntu Linux with GCC 15
   # ---------------------------------------------------------------------------
   linux-gcc15:
-    name: Linux (GCC 15, C++23, CUDA/CPU)
+    name: Linux (GCC 15, C++23, CPU/BLAS)
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install GCC 15 and Dependencies
         run: |
@@ -74,6 +72,7 @@ jobs:
           cmake -B build/release -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_STANDARD=23 \
+            -DENABLE_NATIVE_ARCH=OFF \
             -DENABLE_TESTS=ON \
             -DENABLE_CUDA=OFF
 
@@ -100,8 +99,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Configure CMake
         run: |
@@ -130,8 +127,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Install Build Tools
         run: |

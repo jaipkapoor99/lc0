@@ -74,14 +74,14 @@ std::vector<int> ParseIntList(const std::string& str) {
 
 std::string_view LeftTrim(std::string_view str) {
   const auto it = std::find_if(str.begin(), str.end(),
-                         [](int ch) { return !std::isspace(ch); });
+                         [](unsigned char ch) { return !std::isspace(ch); });
   str.remove_prefix(std::distance(str.begin(), it));
   return str;
 }
 
 std::string_view RightTrim(std::string_view str) {
   auto it = std::find_if(str.rbegin(), str.rend(),
-                         [](int ch) { return !std::isspace(ch); });
+                         [](unsigned char ch) { return !std::isspace(ch); });
   str.remove_suffix(std::distance(str.rbegin(), it));
   return str;
 }

@@ -26,14 +26,14 @@ option(ENABLE_PYTHON_BINDINGS "Build Python bindings" OFF)
 # ------------------------------------------------------------------------------
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   add_compile_options(
-    -Wall
-    -Wextra
-    -Wno-unused-parameter
-    -fno-math-errno
-    -fno-trapping-math
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wall>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wextra>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-Wno-unused-parameter>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-fno-math-errno>
+    $<$<COMPILE_LANGUAGE:C,CXX>:-fno-trapping-math>
   )
   if(ENABLE_NATIVE_ARCH AND NOT MSVC)
-    add_compile_options(-march=native)
+    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:-march=native>)
   endif()
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15")
     link_directories(/usr/lib/gcc/x86_64-linux-gnu/15)
@@ -134,14 +134,32 @@ if(NOT ZLIB_FOUND)
   endif()
 endif()
 
+set(LC0_USE_BLAS OFF)
 if(ENABLE_BLAS)
   if(APPLE)
     find_package(BLAS REQUIRED)
+    set(LC0_USE_BLAS ON)
     add_compile_definitions(USE_BLAS)
   else()
-    find_package(BLAS)
-    find_package(OpenBLAS)
-    add_compile_definitions(USE_BLAS USE_OPENBLAS)
+    find_package(OpenBLAS QUIET)
+    find_package(BLAS QUIET)
+    if(TARGET OpenBLAS::OpenBLAS)
+      set(LC0_USE_BLAS ON)
+      add_compile_definitions(USE_BLAS USE_OPENBLAS)
+    elseif(OpenBLAS_FOUND OR BLAS_FOUND)
+      find_path(CBLAS_INCLUDE_DIR cblas.h
+        HINTS ${OpenBLAS_INCLUDE_DIRS} ${BLAS_INCLUDE_DIRS}
+        PATH_SUFFIXES openblas
+      )
+      if(CBLAS_INCLUDE_DIR)
+        set(LC0_USE_BLAS ON)
+        add_compile_definitions(USE_BLAS USE_OPENBLAS)
+      else()
+        message(STATUS "BLAS found without cblas.h; building CPU backend with Eigen only.")
+      endif()
+    else()
+      message(STATUS "OpenBLAS/BLAS not found; building CPU backend with Eigen only.")
+    endif()
   endif()
 endif()
 
@@ -272,16 +290,14 @@ else()
   list(APPEND LC0_CORE_SOURCES src/utils/filesystem.posix.cc)
 endif()
 
-# BLAS backend sources
-if(ENABLE_BLAS)
-  list(APPEND LC0_CORE_SOURCES
-    src/neural/backends/blas/convolution1.cc
-    src/neural/backends/blas/fully_connected_layer.cc
-    src/neural/backends/blas/network_blas.cc
-    src/neural/backends/blas/se_unit.cc
-    src/neural/backends/blas/winograd_convolution3.cc
-  )
-endif()
+# CPU BLAS / Eigen backend sources (Eigen path is always built cleanly even without OpenBLAS)
+list(APPEND LC0_CORE_SOURCES
+  src/neural/backends/blas/convolution1.cc
+  src/neural/backends/blas/fully_connected_layer.cc
+  src/neural/backends/blas/network_blas.cc
+  src/neural/backends/blas/se_unit.cc
+  src/neural/backends/blas/winograd_convolution3.cc
+)
 
 # Abseil sources needed by lc0 (MoveList, inlined_vector, hash, base, synchronization, time)
 set(ABSL_SOURCES
@@ -387,8 +403,10 @@ target_include_directories(lc0_core PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party
   ${CMAKE_CURRENT_BINARY_DIR}
-  SYSTEM ${ABSEIL_DIR}
-  SYSTEM ${EIGEN_DIR}
+)
+target_include_directories(lc0_core SYSTEM PUBLIC
+  ${ABSEIL_DIR}
+  ${EIGEN_DIR}
 )
 
 target_link_libraries(lc0_core PUBLIC
@@ -406,9 +424,16 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_G
   target_link_libraries(lc0_core PUBLIC "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
 endif()
 
-if(ENABLE_BLAS)
+if(LC0_USE_BLAS)
+  if(CBLAS_INCLUDE_DIR)
+    target_include_directories(lc0_core SYSTEM PRIVATE ${CBLAS_INCLUDE_DIR})
+  endif()
   if(TARGET OpenBLAS::OpenBLAS)
     target_link_libraries(lc0_core PUBLIC OpenBLAS::OpenBLAS)
+  elseif(OpenBLAS_LIBRARIES)
+    target_link_libraries(lc0_core PUBLIC ${OpenBLAS_LIBRARIES})
+  elseif(BLAS_LIBRARIES)
+    target_link_libraries(lc0_core PUBLIC ${BLAS_LIBRARIES})
   elseif(BLAS_FOUND)
     target_link_libraries(lc0_core PUBLIC ${BLAS_LIBRARIES})
   else()
@@ -461,12 +486,14 @@ if(ENABLE_CUDA)
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_BINARY_DIR}
-    SYSTEM ${ABSEIL_DIR}
-    SYSTEM ${EIGEN_DIR}
+  )
+  target_include_directories(lc0_cuda SYSTEM PRIVATE
+    ${ABSEIL_DIR}
+    ${EIGEN_DIR}
   )
 
   if(ENABLE_CUTLASS)
-    target_include_directories(lc0_cuda PRIVATE SYSTEM "${CUTLASS_DIR}/include")
+    target_include_directories(lc0_cuda SYSTEM PRIVATE "${CUTLASS_DIR}/include")
     target_compile_definitions(lc0_cuda PRIVATE USE_CUTLASS)
   endif()
 
@@ -478,15 +505,54 @@ if(ENABLE_CUDA)
     >
   )
 
+  if(MSVC)
+    target_compile_options(lc0_cuda PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:
+        -Xcompiler=/Zc:preprocessor
+        -Xcompiler=/Zc:__cplusplus
+        -Xcompiler=/bigobj
+      >
+    )
+    target_compile_definitions(lc0_cuda PRIVATE NOMINMAX)
+  endif()
+
   target_link_libraries(lc0_cuda PUBLIC
     CUDA::cudart
     CUDA::cublas
     lc0_core
   )
 
-  target_link_libraries(lc0_core PUBLIC lc0_cuda)
   add_compile_definitions(USE_CUDA)
 endif()
+
+# Helper to link static core/backend libraries using whole-archive semantics so
+# REGISTER_BACKEND / REGISTER_NETWORK static initializers are preserved.
+function(lc0_link_whole_libs TARGET_NAME INCLUDE_CUDA)
+  if(APPLE)
+    target_link_libraries(${TARGET_NAME} PRIVATE -Wl,-force_load lc0_core)
+    if(INCLUDE_CUDA AND ENABLE_CUDA)
+      target_link_libraries(${TARGET_NAME} PRIVATE -Wl,-force_load lc0_cuda)
+    endif()
+  elseif(MSVC)
+    target_link_options(${TARGET_NAME} PRIVATE /WHOLEARCHIVE:lc0_core)
+    if(INCLUDE_CUDA AND ENABLE_CUDA)
+      target_link_options(${TARGET_NAME} PRIVATE /WHOLEARCHIVE:lc0_cuda)
+    endif()
+    target_link_libraries(${TARGET_NAME} PRIVATE lc0_core)
+    if(INCLUDE_CUDA AND ENABLE_CUDA)
+      target_link_libraries(${TARGET_NAME} PRIVATE lc0_cuda)
+    endif()
+  else()
+    target_link_libraries(${TARGET_NAME} PRIVATE
+      -Wl,--whole-archive lc0_core -Wl,--no-whole-archive
+    )
+    if(INCLUDE_CUDA AND ENABLE_CUDA)
+      target_link_libraries(${TARGET_NAME} PRIVATE
+        -Wl,--whole-archive lc0_cuda -Wl,--no-whole-archive
+      )
+    endif()
+  endif()
+endfunction()
 
 # ------------------------------------------------------------------------------
 # Python bindings
@@ -501,8 +567,9 @@ if(ENABLE_PYTHON_BINDINGS)
   )
   target_include_directories(backends PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_BINARY_DIR}
   )
-  target_link_libraries(backends PRIVATE lc0_core)
+  lc0_link_whole_libs(backends ON)
   install(TARGETS backends LIBRARY DESTINATION . RUNTIME DESTINATION .)
 endif()
 
@@ -516,41 +583,22 @@ target_include_directories(lc0 PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_BINARY_DIR}
 )
-
-if(APPLE)
-  target_link_libraries(lc0 PRIVATE -Wl,-force_load lc0_core)
-  if(ENABLE_CUDA)
-    target_link_libraries(lc0 PRIVATE -Wl,-force_load lc0_cuda)
-  endif()
-elseif(MSVC)
-  target_link_options(lc0 PRIVATE /WHOLEARCHIVE:lc0_core)
-  if(ENABLE_CUDA)
-    target_link_options(lc0 PRIVATE /WHOLEARCHIVE:lc0_cuda)
-  endif()
-  target_link_libraries(lc0 PRIVATE lc0_core)
-else()
-  # Linux GCC / Clang
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15" AND EXISTS "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
-    target_link_libraries(lc0 PRIVATE "/usr/lib/gcc/x86_64-linux-gnu/15/libstdc++.so")
-  endif()
-  target_link_libraries(lc0 PRIVATE
-    -Wl,--whole-archive lc0_core -Wl,--no-whole-archive
-  )
-  if(ENABLE_CUDA)
-    target_link_libraries(lc0 PRIVATE
-      -Wl,--whole-archive lc0_cuda -Wl,--no-whole-archive
-    )
-  endif()
-endif()
+lc0_link_whole_libs(lc0 ON)
 
 # 2. Rescorer utility (optional, requires gaviotatb)
 option(ENABLE_RESCORER "Build rescorer tool" OFF)
 if(ENABLE_RESCORER)
+  find_path(GAVIOTATB_INCLUDE_DIR gtb-probe.h)
+  find_library(GAVIOTATB_LIBRARY gtb)
+  if(NOT GAVIOTATB_INCLUDE_DIR OR NOT GAVIOTATB_LIBRARY)
+    message(FATAL_ERROR "ENABLE_RESCORER requires Gaviota tablebase headers (gtb-probe.h) and libgtb.")
+  endif()
   add_executable(rescorer
     src/rescorer_main.cc
     src/trainingdata/rescorer.cc
   )
-  target_link_libraries(rescorer PRIVATE lc0_core)
+  target_include_directories(rescorer SYSTEM PRIVATE ${GAVIOTATB_INCLUDE_DIR})
+  target_link_libraries(rescorer PRIVATE lc0_core ${GAVIOTATB_LIBRARY})
 endif()
 
 # ------------------------------------------------------------------------------
@@ -597,7 +645,8 @@ if(ENABLE_TESTS)
       ${CMAKE_CURRENT_SOURCE_DIR}/src
       ${CMAKE_CURRENT_BINARY_DIR}
     )
-    target_link_libraries(${TNAME} PRIVATE lc0_core GTest::gtest GTest::gtest_main)
+    target_link_libraries(${TNAME} PRIVATE GTest::gtest GTest::gtest_main)
+    lc0_link_whole_libs(${TNAME} OFF)
     if(TARGET GTest::gmock)
       target_link_libraries(${TNAME} PRIVATE GTest::gmock)
     elseif(TARGET gmock)

@@ -25,10 +25,6 @@
 
 #include <array>
 
-#ifdef USE_ISPC
-#include "winograd_transform_ispc.h"
-#endif
-
 namespace lczero {
 template <typename T>
 using EigenMatrixMap =
@@ -60,8 +56,6 @@ template <bool use_eigen>
 void WinogradConvolution3<use_eigen>::TransformIn(const size_t batch_size,
                                                   const float* input,
                                                   const size_t channels) {
-#ifndef USE_ISPC
-
   static const size_t kCacheSize = 128;
   float x[kWinogradAlpha][kWinogradAlpha];
   float T1[kWinogradAlpha][kWinogradAlpha];
@@ -150,12 +144,6 @@ void WinogradConvolution3<use_eigen>::TransformIn(const size_t batch_size,
       }
     }
   }
-
-#else  // USE_ISPC
-
-  ispc::winograd_TransformIn_ispc(batch_size, input, channels, &V_[0]);
-
-#endif  // USE_ISPC
 }
 
 #ifdef USE_BLAS
@@ -259,8 +247,6 @@ template <bool use_eigen>
 void WinogradConvolution3<use_eigen>::TransformOut(const size_t batch_size,
                                                    float* output,
                                                    const size_t channels) {
-#ifndef USE_ISPC
-
   float m[kWinogradTile];
 
   for (size_t batch_index = 0; batch_index < batch_size; batch_index++) {
@@ -315,12 +301,6 @@ void WinogradConvolution3<use_eigen>::TransformOut(const size_t batch_size,
       }
     }
   }
-
-#else  // USE_ISPC
-
-  ispc::winograd_TransformOut_ispc(batch_size, &M_[0], channels, output);
-
-#endif  // USE_ISPC
 }
 
 template class WinogradConvolution3<true>;

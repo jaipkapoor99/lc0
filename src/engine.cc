@@ -170,6 +170,7 @@ void Engine::UpdateBackendConfig() {
     backend_name_ = backend_name;
     backend_ = CreateMemCache(BackendManager::Get()->CreateFromParams(options_),
                               options_);
+    backend_warmed_up_ = false;
     search_->SetBackend(backend_.get());
   } else {
     backend_->SetCacheSize(
@@ -244,7 +245,8 @@ void Engine::EnsureReady() {
   isready_seen_ = true;
   UpdateBackendConfig();
   EnsureSyzygyTablebasesLoaded();
-  if (backend_) {
+  if (backend_ && !backend_warmed_up_) {
+    backend_warmed_up_ = true;
     try {
       GameState dummy_state = MakeGameState(ChessBoard::kStartposFen, {});
       auto warmup = backend_->CreateComputation();
