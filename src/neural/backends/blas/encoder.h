@@ -20,10 +20,6 @@
 
 #include <cmath>
 
-#ifdef USE_ISPC
-#include "layer_norm_ispc.h"
-#endif
-
 namespace lczero {
 
 void LayerNorm2DWithSkipConnection(const size_t batch_size,
@@ -32,7 +28,6 @@ void LayerNorm2DWithSkipConnection(const size_t batch_size,
                                    const float* gammas, const float* betas,
                                    float epsilon) {
   for (size_t i = 0; i < batch_size; i++) {
-#ifndef USE_ISPC
     // Mean taken in dimension C.
     float mean = 0;
     if (skip != nullptr) {
@@ -63,17 +58,6 @@ void LayerNorm2DWithSkipConnection(const size_t batch_size,
       data[i * channels + c] =
           betas[c] + gammas[c] * (data[i * channels + c] - mean) * den;
     }
-#else
-    if (skip != nullptr) {
-      ispc::LayerNorm2DWithSkipConnection(channels, data + i * channels, alpha,
-                                          skip + i * channels, gammas, betas,
-                                          epsilon);
-    } else {
-      ispc::LayerNorm2DWithSkipConnection(channels, data + i * channels, alpha,
-                                          nullptr, gammas, betas, epsilon);
-    }
-
-#endif
   }
 }
 

@@ -170,6 +170,7 @@ void Engine::UpdateBackendConfig() {
     backend_name_ = backend_name;
     backend_ = CreateMemCache(BackendManager::Get()->CreateFromParams(options_),
                               options_);
+    backend_warmed_up_ = false;
     search_->SetBackend(backend_.get());
   } else {
     backend_->SetCacheSize(
@@ -240,7 +241,27 @@ void Engine::Go(const GoParams& params) {
   search_->StartSearch(params);
 }
 
-void Engine::EnsureReady() { isready_seen_ = true; }
+void Engine::EnsureReady() {
+  isready_seen_ = true;
+  UpdateBackendConfig();
+  EnsureSyzygyTablebasesLoaded();
+  if (backend_ && !backend_warmed_up_) {
+    backend_warmed_up_ = true;
+    try {
+      GameState dummy_state = MakeGameState(ChessBoard::kStartposFen, {});
+      auto warmup = backend_->CreateComputation();
+      if (warmup) {
+        warmup->AddInput(
+            EvalPosition{std::span<const Position>(&dummy_state.startpos, 1),
+                         {}},
+            {});
+        warmup->ComputeBlocking();
+      }
+    } catch (...) {
+      // Warmup is best effort.
+    }
+  }
+}
 
 void Engine::Wait() { search_->WaitSearch(); }
 

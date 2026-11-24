@@ -1,6 +1,6 @@
 [build-system]
-requires = ["meson-python"]
-build-backend = "mesonpy"
+requires = ["pybind11>=2.11", "scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "lczero_bindings"
@@ -9,7 +9,8 @@ description = "Leela Chess Zero Python bindings"
 authors = [{ name = "The LCZero Authors" }]
 license = {file = "COPYING"}
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
+dependencies = ["python-chess>=1.999"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Games/Entertainment :: Board Games",
@@ -20,8 +21,40 @@ classifiers = [
 [project.urls]
 homepage = "https://github.com/LeelaChessZero/lc0"
 
-[tool.meson-python.args]
-dist = []
-setup = ["-Dpython_bindings=true"]
-compile = []
-install = []
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "pyrefly>=1.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.9",
+    "pyrefly>=1.2.0",
+]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 88
+extend-exclude = ["build", "builddir", "subprojects", "third_party"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.scikit-build]
+cmake.version = ">=3.28"
+cmake.args = ["-DENABLE_CUDA=OFF", "-DENABLE_TESTS=OFF", "-DENABLE_PYTHON_BINDINGS=ON"]
+wheel.install-dir = "lczero"
+
+[tool.pyrefly]
+project-includes = [
+    "scripts/**/*.py",
+    "src/**/*.py",
+]
+project-excludes = [
+    "build/**",
+    "builddir/**",
+    "subprojects/**",
+    "third_party/**",
+    ".venv/**",
+]

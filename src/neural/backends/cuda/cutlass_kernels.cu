@@ -25,6 +25,9 @@
   Program grant you additional permission to convey the resulting work.
 */
 
+#include <atomic>
+#include <cstdint>
+
 #include "neural/backends/cuda/cuda_common.h"
 
 // Fused MHA implementation from cutlass example #41
@@ -97,8 +100,19 @@ void fusedMHACutlass(void* output, void* q, void* k, void* v, void* skip,
   constexpr auto kernel_fn = attention_kernel_batched_impl<Attention>;
   int smem_bytes = sizeof(typename Attention::SharedStorage);
   if (smem_bytes > 0xc000) {
-    ReportCUDAErrors(cudaFuncSetAttribute(
-        kernel_fn, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_bytes));
+    static std::atomic<uint64_t> smem_configured_devices{0};
+    int device = 0;
+    ReportCUDAErrors(cudaGetDevice(&device));
+    const uint64_t bit =
+        (device >= 0 && device < 64) ? (uint64_t{1} << device) : 0;
+    if (bit == 0 ||
+        (smem_configured_devices.load(std::memory_order_relaxed) & bit) == 0) {
+      ReportCUDAErrors(cudaFuncSetAttribute(
+          kernel_fn, cudaFuncAttributeMaxDynamicSharedMemorySize, smem_bytes));
+      if (bit != 0) {
+        smem_configured_devices.fetch_or(bit, std::memory_order_relaxed);
+      }
+    }
   }
   if (!Attention::check_supported(p)) {
     throw Exception("Unhandled case in cutlass MHA: check_supported failed.");

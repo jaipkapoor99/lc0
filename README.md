@@ -35,152 +35,96 @@ Having successfully acquired Lc0 via either of these methods, proceed to the bui
 
 ## Building and running Lc0
 
-Building should be easier now than it was in the past. Please report any problems you have.
+Building Lc0 is straightforward using **CMake** (3.28+) and a **C++23** capable compiler (GCC 15+, Clang 18+, or MSVC from Visual Studio 2022 17.8+).
 
-Building lc0 requires the Meson build system and at least one backend library for evaluating the neural network, as well as a few libraries. If your system already has these libraries installed, they will be used; otherwise Meson will generate its own copy (a "subproject"), which in turn requires that git is installed (yes, separately from cloning the actual lc0 repository). Meson also requires python and Ninja.
+Dependencies (Abseil, Eigen, CUTLASS, ZLIB, and GoogleTest) are automatically managed via CMake's `FetchContent` or discovered from your system if installed.
 
-Backend support includes (in theory) any CBLAS-compatible library for CPU usage, but OpenBLAS or Intel's DNNL are the main ones. For GPUs, the following are supported: CUDA (with optional cuDNN), HIP/ROCm for AMD GPUs, various flavors of onnxruntime, and Apple's Metal Performance Shaders. There is also experimental SYCL support for AMD and Intel GPUs.
+### Quick Start with CMake Presets
 
-Finally, lc0 requires a compiler supporting C++20. Minimal versions tested are g++ v10.0, clang v12.0 and Visual Studio 2019 version 16.11.
+Lc0 provides unified presets in `CMakePresets.json`:
 
-Given those basics, the OS and backend specific instructions are below.
-
-### Linux
-
-#### Generic
-
-1. Install backend (also read the detailed instructions in later sections):
-    - If you want to use NVidia graphics cards Install [CUDA](https://developer.nvidia.com/cuda-zone) (and optionally [cuDNN](https://developer.nvidia.com/cudnn)).
-    - If you want to use AMD graphics cards install [ROCm](https://rocm.docs.amd.com/) and build with the HIP backend.
-    - If you want to use Intel graphics cards you can try SYCL.
-    - if you want BLAS install either OpenBLAS or DNNL.
-2. Install ninja build (`ninja-build`), meson, and (optionally) gtest (`libgtest-dev`).
-3. Go to `lc0/`
-4. Run `./build.sh`
-5. `lc0` will be in `lc0/build/release/` directory
-6. Download a [neural network](https://lczero.org/play/networks/bestnets/) in the same directory as the binary (no need to unpack it).
-
-If you want to build with a different compiler, pass the `CC` and `CXX` environment variables:
 ```shell
-CC=clang CXX=clang++ ./build.sh
+# Linux (GCC 15, C++23, CUDA/CUTLASS, Native optimizations)
+cmake --preset linux-gcc15-release
+cmake --build --preset linux-release -j
+
+# Windows (MSVC, C++23, CUDA, CUTLASS)
+cmake --preset windows-msvc-cuda
+cmake --build --preset windows-cuda -j
+
+# Generic CPU Release (C++23, BLAS / Eigen fallback)
+cmake --preset generic-release
+cmake --build --preset generic -j
 ```
 
-#### Ubuntu 20.04
+### Manual Configuration
 
-For Ubuntu 20.04 you need meson, ninja and gcc-10 before performing the steps above. The following should work:
-```shell
-apt-get update
-apt-get -y install git python3-pip gcc-10 g++-10 zlib1g zlib1g-dev
-pip3 install meson
-pip3 install ninja
-CC=gcc-10 CXX=g++-10 INSTALL_PREFIX=~/.local ./build.sh
-```
+#### Linux
 
-Make sure that `~/.local/bin` is in your `PATH` environment variable. You can now type `lc0 --help` and start.
+1. Install dependencies:
+   - C++23 compiler: GCC 15 (`gcc-15`, `g++-15`) or Clang 18+
+   - CMake 3.28+ and Ninja: `apt-get install -y cmake ninja-build`
+   - Optional: NVIDIA CUDA Toolkit (v12.x or v13.x) for GPU evaluation, `libopenblas-dev` for CPU BLAS
+2. Configure and build:
+   ```shell
+   cmake -B build/release -G Ninja \
+     -DCMAKE_BUILD_TYPE=Release \
+     -DCMAKE_CXX_STANDARD=23 \
+     -DENABLE_CUDA=ON \
+     -DENABLE_CUTLASS=ON \
+     -DENABLE_TESTS=ON
+   cmake --build build/release -j $(nproc)
+   ```
+3. Run tests:
+   ```shell
+   ctest --test-dir build/release --output-on-failure
+   ```
+4. Download a [neural network weights file](https://lczero.org/play/networks/bestnets/) and place it in the same directory as the executable.
 
-### Windows
+#### Windows
 
-Here are the brief instructions for CUDA/cuDNN, for details and other options see `windows-build.md` and the instructions in the following sections.
+1. Install Visual Studio 2022 (version 17.8 or newer) with C++ Desktop Development and CMake tools.
+2. Install [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads) (v12.0 or newer).
+3. Open a Developer PowerShell / Command Prompt and run:
+   ```powershell
+   cmake -B build -G "Visual Studio 17 2022" -A x64 `
+     -DCMAKE_BUILD_TYPE=Release `
+     -DCMAKE_CXX_STANDARD=23 `
+     -DENABLE_CUDA=ON `
+     -DENABLE_CUTLASS=ON `
+     -DENABLE_TESTS=ON
+   cmake --build build --config Release --parallel $env:NUMBER_OF_PROCESSORS
+   ```
+4. The executable will be at `build/Release/lc0.exe`.
 
-1. Install Microsoft Visual Studio (2019 version 16.11 or later)
-2. Install [CUDA](https://developer.nvidia.com/cuda-zone)
-3. (Optionally install [cuDNN](https://developer.nvidia.com/cudnn)).
-4. Install Python3 if you didn't install it with Visual Studio.
-5. Install Meson: `pip3 install --upgrade meson`
-6. If `CUDA_PATH` is not set (run the `set` command to see the full list of variables), edit `build.cmd` and set the `CUDA_PATH` with your CUDA directory
-* If you also want cuDNN, set `CUDNN_PATH` with your cuDNN directory (not needed if it is the same with `CUDA_PATH`).
+#### macOS (Apple Silicon)
 
-7. Run `build.cmd`. It will ask permission to delete the build directory, then generate MSVS project and pause.
-
-Then either:
-
-8. Hit `Enter` to build it.
-9. Resulting binary will be `build/lc0.exe`
-
-Or.
-
-8. Open generated solution `build/lc0.sln` in Visual Studio and build it yourself.
-
-### Mac
-
-You will need xcode and python3 installed. Then you need to install some required packages through Terminal:
-
-1. Install meson: `pip3 install meson`
-2. Install ninja: `pip3 install ninja`
-
-Now download the lc0 source, if you haven't already done so, following the instructions earlier in the page.
-
-3. Go to the lc0 directory.
-4. Run `./build.sh -Dgtest=false`
-
-The compiled Lc0 will be in `build/release` 
+1. Install Xcode Command Line Tools, CMake, and Ninja (`brew install cmake ninja`).
+2. Configure and build:
+   ```shell
+   cmake -B build -G Ninja \
+     -DCMAKE_BUILD_TYPE=Release \
+     -DCMAKE_CXX_STANDARD=23 \
+     -DENABLE_CUDA=OFF \
+     -DENABLE_TESTS=ON
+   cmake --build build --parallel $(sysctl -n hw.ncpu)
+   ``` 
 
 Starting with v0.32.0, we are also offering a pre-compiled version that can be downloaded from the [release page](https://github.com/LeelaChessZero/lc0/releases).
 
 ### CUDA
 
-CUDA can be downloaded and installed following the instructions in from <https://developer.nvidia.com/cuda-downloads>. The build in most cases will pick it up with no further action. However if the cuda compiler (`nvcc`) is not found you can call the build like this: `PATH=/usr/local/cuda/bin:$PATH ./build.sh`, replacing the path with the correct one for `nvcc`.
+CUDA can be downloaded and installed from <https://developer.nvidia.com/cuda-downloads>. CMake's `enable_language(CUDA)` and `FindCUDAToolkit` will automatically detect `nvcc` and cuBLAS. If `nvcc` is not on your `PATH`, pass `-DCMAKE_CUDA_COMPILER=/path/to/nvcc` to `cmake`.
 
-*Note* that CUDA uses the system compiler and stops if it doesn't recognize the version, even if newer. This is more of an issue with new Linux versions, but you can get around with the `nvcc_ccbin` build option to specify a different compiler just for cuda. As an example, adding `-Dnvcc_ccbin=g++-11` to the build command line will use g++-11 with cuda instead of the system compiler.
+- Target GPU architecture defaults to `native` (`CMAKE_CUDA_ARCHITECTURES=native`) for peak SASS performance. Override with e.g. `-DCMAKE_CUDA_ARCHITECTURES=89` or `120` when cross-compiling.
+- CUTLASS fused multi-head attention (FMHA) is enabled by default (`-DENABLE_CUTLASS=ON`).
+- Available runtime backends: `cuda-auto`, `cuda`, `cuda-fp16`, and `cuda-bf16` (for Ampere / Blackwell GPUs).
 
-### ONNX
+### BLAS / CPU
 
-Lc0 offers several ONNX based backends, namely onnx-cpu, onnx-cuda, onnx-trt, onnx-rocm and on Windows onnx-dml, utilizing the execution providers offered by onnxruntime.
+Lc0 can also run on CPU using OpenBLAS/Accelerate (`-DENABLE_BLAS=ON`) or the built-in Eigen and handcrafted `trivial` evaluators (`-DENABLE_BLAS=OFF`). On macOS, Apple's Accelerate framework is used automatically when `ENABLE_BLAS=ON`.
 
-Some Linux systems are starting to offer onnxruntime packages, so after installing this there is a good chance the Lc0 build will pick it up with no further action required. Otherwise you can set the `onnx_libdir` and `onnx_include` build options to point to the onnxruntime libraries and include directories respectively. The same options are used if you unpack a package downloaded from <https://github.com/microsoft/onnxruntime/releases>.
-
-For Windows, we offer pre-compiled packages for onnx-dml and onnx-trt, see the included README for installation instructions.
-
-### SYCL
-
-*Note* that SYCL support is new in v0.32.0 and as such is still considered experimental.
-
-You will need the Intel "oneAPI DPC++/C++ Compiler", "DPC++ Compatibility Tool" and (for an Intel GPU) "oneAPI Math Kernel Library (oneMKL)" or (for an AMD GPU) hipBLAS.
-
-The Intel tools can be found in either the "oneAPI Base Toolkit" or "C++ Essentials" packages that can be downloaded from
-<https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html>, while hipBLAS can be downloaded from
-<https://rocm.docs.amd.com/projects/hipBLAS/en/latest/>
-
-The compiler for C code is icx and for C++ code is icx on Windows but icpx on Linux.
-
-To build Lc0 with SYCL you need to set the `sycl` build option using `-Dsycl=l0` (that is el zero) for an Intel GPU or `-Dsycl=amd` for (you guessed it) an AMD GPU.
-
-You may also have to set the `dpct_include` option to point to the DPC++ Compatibility Tool includes, the `onemkl_include` similarly for the oneMKL includes, or `hip_libdirs` and `hip_include` to the AMD HIP libraries and includes respectively.
-
-On Linux, a typical session would go like this:
-```shell
-. /opt/intel/oneapi/setvars.sh --include-intel-llvm
-CC=icx CXX=icpx AR=llvm-ar ./build.sh release -Dgtest=false -Dsycl=l0
-```
-The first line is to initialize the build environment and is only needed once per session, while the build line may need modification as described above.
-
-On windows you will have to build using `ninja`, this is provided by Visual Studio if you install the CMake component. We provide a `build-sycl.cmd` script that should build just fine for an Intel GPU. This script has not yet been tested with and AMD GPU, some editing will be required.
-
-You can also install the [oneAPI DPC++/C++ Compiler Runtime](https://www.intel.com/content/www/us/en/developer/articles/tool/compilers-redistributable-libraries-by-version.html) so you can run Lc0 without needing to initialize the build environment every time.
-
-### HIP (ROCm)
-
-The `hip`, `hip-fp16` and `hip-auto` backends run lc0's own CUDA NN-backend kernels (the cuBLAS + custom-kernel path) on AMD GPUs by compiling them with `hipcc`, so AMD users get a first-class ROCm path without the SYCL/DPC++ toolchain. This is distinct from the SYCL backend above (a different toolchain) and from `onnx-rocm` (which runs the network inside onnxruntime rather than lc0's own kernels). cuDNN/MIOpen and the optional CUTLASS fused-MHA are not used; the cuBLAS attention fallback runs in their place.
-
-You will need a [ROCm](https://rocm.docs.amd.com/) installation providing `hipcc` and hipBLAS. Enable the backend with `-Dhip=true`. The target GPU architecture is taken from `-Damd_gfx` (e.g. `-Damd_gfx=gfx90a`); if it is omitted, the first architecture reported by `rocm_agent_enumerator` is used, which needs meson 1.2.0 or newer. There is no default architecture: when nothing can be detected the build stops and asks for an explicit `-Damd_gfx`, rather than guessing an architecture the machine may not have. Use `hip_libdirs` and `hip_include` if the ROCm libraries and headers are not in the default search path. lc0's HIP build links the kernels objects (built by `hipcc`) into a non-LTO host build, so pass `-Db_lto=false`.
-
-A typical session on Linux:
-```shell
-meson setup build-hip -Dhip=true -Damd_gfx=gfx90a \
-  -Dplain_cuda=false -Dcudnn=false -Dcutlass=false -Dnvcc=false \
-  -Dgtest=true -Dblas=true -Db_lto=false \
-  -Dhip_libdirs=/opt/rocm/lib -Dhip_include=/opt/rocm/include
-ninja -C build-hip
-```
-Then select the backend at runtime with `--backend=hip` (or `hip-fp16` for the half-precision path). The HIP backends have been validated on Linux with ROCm on gfx90a (CDNA2) and gfx1100 (RDNA3).
-
-### BLAS
-
-Lc0 can also run (a bit slow) on CPU, using matrix multiplication functions from a BLAS library. By default OpenBLAS is used if available as it seems to offer good performance on a wide range of processors. If your system doesn't offer an OpenBLAS package (e.g. `libopenblas-dev`), or you have a recent processor you can get DNNL from [here](<https://github.com/uxlfoundation/oneDNN/releases/v2.2>). To use DNNL you have to pass `-Ddnnl=true` to the build and specify the directory where it was installed using the `-Ddnnl_dir=` option. For macs, the Accelerate library will be used.
-
-If the "Intel Implicit SPMD Program Compiler" (`ispc`) is [installed](<https://ispc.github.io/downloads.html>), some performance critical functions will use vectorized code for faster execution. 
-
-*Note* that Lc0 is not able to control the number of threads with all BLAS libraries. Some libraries try to exploit cores aggressively, in which case it may be best to leave the threads set to the default (i.e. automatic) setting.
+*Note*: Additional non-NVIDIA GPU/NPU backend sources (`onnx` for DirectML/CoreML/ROCm/MIGraphX, `metal` for Apple Silicon GPU, and `hip_compat.h` in `cuda` for AMD ROCm/HIP) remain in `src/neural/backends/` alongside the modern CMake `CUDA`/`CUTLASS` (Transformer-only) and `BLAS`/`Eigen`/CPU backends.
 
 ## Getting help
 
@@ -215,8 +159,8 @@ along with Leela Chess.  If not, see <http://www.gnu.org/licenses/>.
 
 ### Additional permission under GNU GPL version 3 section 7
 
-_The source files of Lc0 with the exception of the BLAS, OpenCL and SYCL
-backends (all files in the `blas`, `opencl` and `sycl` sub-directories) have
+_The source files of Lc0 with the exception of the BLAS
+backend (all files in the `blas` sub-directory) have
 the following additional permission, as allowed under GNU GPL version 3
 section 7:_
 

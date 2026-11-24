@@ -25,15 +25,11 @@
   Program grant you additional permission to convey the resulting work.
 */
 
-#include <fstream>
-#include <iostream>
-
 #include "neural/loader.h"
 #include "neural/onnx/converter.h"
-#include "neural/xla/onnx2hlo.h"
-#include "neural/xla/print_hlo.h"
 #include "tools/describenet.h"
 #include "utils/files.h"
+#include "utils/logging.h"
 #include "utils/optionsparser.h"
 
 namespace lczero {
@@ -42,17 +38,11 @@ namespace {
 const OptionId kInputFilenameId{"input", "",
                                 "Path of the input Lc0 weights file."};
 const OptionId kOutputFilenameId{"output", "", "Path of the output ONNX file."};
-const OptionId kHloTextOutputFilenameId = {"hlo-text-output", "",
-                                           "Path of the output HLO file."};
-const OptionId kHloProtoOutputFilenameId = {
-    "hlo-proto-output", "", "Path of the output HLO proto file."};
 const OptionId kOnnxBatchSizeId{
     {.long_flag = "onnx-batch-size",
      .uci_option = "",
      .help_text = "Batch size to use for ONNX conversion.",
      .visibility = OptionId::kProOnly}};
-const OptionId kHloBatchSizeId{"hlo-batch-size", "",
-                               "Batch size to use for HLO conversion."};
 const OptionId kOnnxDataTypeId{"onnx-data-type", "",
                                "Data type to use in the ONNX model."};
 const OptionId kOnnxOpsetId{"onnx-opset", "",
@@ -61,12 +51,6 @@ const OptionId kOnnxIrId{
     {.long_flag = "onnx-ir",
      .uci_option = "",
      .help_text = "IR to use for the ONNX model.",
-     .visibility = OptionId::kProOnly}};
-const OptionId kHloAllowPartialResultId{
-    {.long_flag = "hlo-allow-partial-result",
-     .uci_option = "",
-     .help_text = "Allow partial result in case of HLO conversion failure "
-                  "(DEBUG ONLY!).",
      .visibility = OptionId::kProOnly}};
 const OptionId kInputPlanesName{"input-planes-name", "",
                                 "ONNX name to use for the input planes node."};
@@ -95,15 +79,11 @@ const OptionId kPolicyHead{"policy-head", "",
 bool ProcessParameters(OptionsParser* options) {
   options->Add<StringOption>(kInputFilenameId);
   options->Add<StringOption>(kOutputFilenameId);
-  options->Add<StringOption>(kHloTextOutputFilenameId);
-  options->Add<StringOption>(kHloProtoOutputFilenameId);
   options->Add<IntOption>(kOnnxBatchSizeId, -1, 2048) = -1;
   options->Add<IntOption>(kOnnxOpsetId, 7, 18) = 17;
   options->Add<IntOption>(kOnnxIrId, -1, 10) = -1;
-  options->Add<IntOption>(kHloBatchSizeId, 1, 2048) = 333;
   options->Add<ChoiceOption>(
       kOnnxDataTypeId, std::vector<std::string>{"f32", "f16", "bf16"}) = "f32";
-  options->Add<BoolOption>(kHloAllowPartialResultId);
 
   options->Add<StringOption>(kInputPlanesName) = "/input/planes";
   options->Add<StringOption>(kOutputPolicyHead) = "/output/policy";
@@ -117,13 +97,7 @@ bool ProcessParameters(OptionsParser* options) {
 
   const OptionsDict& dict = options->GetOptionsDict();
   dict.EnsureExists<std::string>(kInputFilenameId);
-  if (!dict.OwnExists<std::string>(kOutputFilenameId) &&
-      !dict.OwnExists<std::string>(kHloTextOutputFilenameId) &&
-      !dict.OwnExists<std::string>(kHloProtoOutputFilenameId)) {
-    throw Exception(
-        "At least one of --output, --hlo-text-output or --hlo-proto-output "
-        "must be specified.");
-  }
+  dict.EnsureExists<std::string>(kOutputFilenameId);
   return true;
 }
 
@@ -163,32 +137,7 @@ void ConvertLeelaToOnnx() {
   }
 
   const auto& onnx = weights_file.onnx_model();
-  if (dict.OwnExists<std::string>(kOutputFilenameId)) {
-    WriteStringToFile(dict.Get<std::string>(kOutputFilenameId), onnx.model());
-  }
-  if (dict.OwnExists<std::string>(kHloTextOutputFilenameId) ||
-      dict.OwnExists<std::string>(kHloProtoOutputFilenameId)) {
-    Onnx2HloOptions hlo_options;
-    hlo_options.debugging_allow_partial_result =
-        dict.Get<bool>(kHloAllowPartialResultId);
-    pblczero::ModelProto onnx_model;
-    onnx_model.ParseFromString(onnx.model());
-    auto hlo_result = ConvertOnnxToHlo(
-        onnx_model, dict.Get<int>(kHloBatchSizeId), hlo_options);
-    if (dict.OwnExists<std::string>(kHloTextOutputFilenameId)) {
-      std::string filename = dict.Get<std::string>(kHloTextOutputFilenameId);
-      if (filename == "-") {
-        PrettyPrintHlo(hlo_result.hlo_module, {}, std::cout);
-      } else {
-        std::ofstream file(filename.c_str());
-        PrettyPrintHlo(hlo_result.hlo_module, {}, file);
-      }
-    }
-    if (dict.OwnExists<std::string>(kHloProtoOutputFilenameId)) {
-      WriteStringToFile(dict.Get<std::string>(kHloProtoOutputFilenameId),
-                        hlo_result.hlo_module.OutputAsString());
-    }
-  }
+  WriteStringToFile(dict.Get<std::string>(kOutputFilenameId), onnx.model());
   ShowNetworkOnnxInfo(weights_file, false);
   COUT << "Done.";
 }

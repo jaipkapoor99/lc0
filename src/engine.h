@@ -84,6 +84,7 @@ class Engine : public EngineControllerBase {
   std::optional<GameState> last_position_ = std::nullopt;
   // Go parameters for the last search. Used on ponder.
   std::optional<GoParams> last_go_params_ = std::nullopt;
+  bool backend_warmed_up_ = false;
 };
 
 }  // namespace lczero

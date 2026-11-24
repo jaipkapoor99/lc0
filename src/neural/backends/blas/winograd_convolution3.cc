@@ -25,10 +25,6 @@
 
 #include <array>
 
-#ifdef USE_ISPC
-#include "winograd_transform_ispc.h"
-#endif
-
 namespace lczero {
 template <typename T>
 using EigenMatrixMap =
@@ -60,8 +56,6 @@ template <bool use_eigen>
 void WinogradConvolution3<use_eigen>::TransformIn(const size_t batch_size,
                                                   const float* input,
                                                   const size_t channels) {
-#ifndef USE_ISPC
-
   static const size_t kCacheSize = 128;
   float x[kWinogradAlpha][kWinogradAlpha];
   float T1[kWinogradAlpha][kWinogradAlpha];
@@ -150,12 +144,6 @@ void WinogradConvolution3<use_eigen>::TransformIn(const size_t batch_size,
       }
     }
   }
-
-#else  // USE_ISPC
-
-  ispc::winograd_TransformIn_ispc(batch_size, input, channels, &V_[0]);
-
-#endif  // USE_ISPC
 }
 
 #ifdef USE_BLAS
@@ -164,49 +152,6 @@ void WinogradConvolution3<false>::Sgemm(const size_t batch_size,
                                         const float* weights,
                                         const size_t input_channels,
                                         const size_t output_channels) {
-#ifdef USE_MKL
-
-  /*
-   void cblas_sgemm_batch (const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE*
-   transa_array, const CBLAS_TRANSPOSE* transb_array, const MKL_INT* m_array,
-   const MKL_INT* n_array, const MKL_INT* k_array, const float* alpha_array,
-   const float **a_array, const MKL_INT* lda_array, const float **b_array, const
-   MKL_INT* ldb_array, const float* beta_array, float **c_array, const MKL_INT*
-   ldc_array, const MKL_INT group_count, const MKL_INT* group_size);
-   */
-
-  CBLAS_TRANSPOSE transA = CblasNoTrans;
-  CBLAS_TRANSPOSE transB = CblasNoTrans;
-  MKL_INT m_array = output_channels;
-  MKL_INT n_array = batch_size * kTiles;
-  MKL_INT k_array = input_channels;
-  float alpha_array = 1.0;
-  const float* a_array[kWinogradTile];
-  MKL_INT lda_array = output_channels;
-  const float* b_array[kWinogradTile];
-  MKL_INT ldb_array = input_channels;
-  float* c_array[kWinogradTile];
-  MKL_INT ldc_array = output_channels;
-  float beta_array = 0.0;
-  MKL_INT groupSize = kWinogradTile;
-
-  for (auto b = 0; b < kWinogradTile; b++) {
-    auto offset_u = b * output_channels * input_channels;
-    auto offset_v = b * batch_size * input_channels * kTiles;
-    auto offset_m = b * batch_size * output_channels * kTiles;
-
-    a_array[b] = &weights[offset_u];
-    b_array[b] = &V_[offset_v];
-    c_array[b] = &M_[offset_m];
-  }
-
-  cblas_sgemm_batch(CblasColMajor, &transA, &transB, &m_array, &n_array,
-                    &k_array, &alpha_array, a_array, &lda_array, b_array,
-                    &ldb_array, &beta_array, c_array, &ldc_array, 1,
-                    &groupSize);
-
-#else
-
   for (size_t b = 0; b < kWinogradTile; b++) {
     auto offset_u = b * output_channels * input_channels;
 
@@ -233,7 +178,6 @@ void WinogradConvolution3<false>::Sgemm(const size_t batch_size,
                 &M_[offset_m],               // M
                 (int)output_channels);       // ldM
   }
-#endif
 }
 #endif
 
@@ -259,8 +203,6 @@ template <bool use_eigen>
 void WinogradConvolution3<use_eigen>::TransformOut(const size_t batch_size,
                                                    float* output,
                                                    const size_t channels) {
-#ifndef USE_ISPC
-
   float m[kWinogradTile];
 
   for (size_t batch_index = 0; batch_index < batch_size; batch_index++) {
@@ -315,12 +257,6 @@ void WinogradConvolution3<use_eigen>::TransformOut(const size_t batch_size,
       }
     }
   }
-
-#else  // USE_ISPC
-
-  ispc::winograd_TransformOut_ispc(batch_size, &M_[0], channels, output);
-
-#endif  // USE_ISPC
 }
 
 template class WinogradConvolution3<true>;

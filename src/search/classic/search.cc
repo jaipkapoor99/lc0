@@ -36,6 +36,7 @@
 #include <sstream>
 #include <thread>
 
+#include "absl/container/inlined_vector.h"
 #include "neural/encoder.h"
 #include "search/classic/node.h"
 #include "utils/fastmath.h"
@@ -201,7 +202,7 @@ Search::Search(const NodeTree& tree, Backend* backend,
 namespace {
 void ApplyDirichletNoise(Node* node, float eps, double alpha) {
   float total = 0;
-  std::vector<float> noise;
+  absl::InlinedVector<float, 64> noise;
 
   for (int i = 0; i < node->GetNumEdges(); ++i) {
     float eta = Random::Get().GetGamma(alpha, 1.0);
@@ -604,7 +605,7 @@ void Search::SendMovesStats() const REQUIRES(counters_mutex_) {
 
 PositionHistory Search::GetPositionHistoryAtNode(const Node* node) const {
   PositionHistory history(played_history_);
-  std::vector<Move> rmoves;
+  MoveList rmoves;
   for (const Node* n = node; n != root_node_; n = n->GetParent()) {
     rmoves.push_back(n->GetOwnEdge()->GetMove());
   }
@@ -738,7 +739,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
   // * If two nodes have equal number:
   //   * If that number is 0, the one with larger prior wins.
   //   * If that number is larger than 0, the one with larger eval wins.
-  std::vector<EdgeAndNode> edges;
+  absl::InlinedVector<EdgeAndNode, 64> edges;
   for (auto& edge : parent->Edges()) {
     if (parent == root_node_ && !root_move_filter_.empty() &&
         std::find(root_move_filter_.begin(), root_move_filter_.end(),
@@ -808,7 +809,7 @@ std::vector<EdgeAndNode> Search::GetBestChildrenNoTemperature(Node* parent,
   if (count < static_cast<int>(edges.size())) {
     edges.resize(count);
   }
-  return edges;
+  return {edges.begin(), edges.end()};
 }
 
 // Returns a child with most visits.
@@ -823,7 +824,7 @@ EdgeAndNode Search::GetBestRootChildWithTemperature(float temperature) const {
   // Root is at even depth.
   const float draw_score = GetDrawScore(/* is_odd_depth= */ false);
 
-  std::vector<float> cumulative_sums;
+  absl::InlinedVector<float, 64> cumulative_sums;
   float sum = 0.0;
   float max_n = 0.0;
   const float offset = params_.GetTemperatureVisitOffset();
@@ -1500,7 +1501,7 @@ void SearchWorker::PickNodesToExtend(int collision_limit) {
     Mutex::Lock lock(picking_tasks_mutex_);
     task_added_.notify_all();
   }
-  std::vector<Move> empty_movelist;
+  MoveList empty_movelist;
   // This lock must be held until after the task_completed_ wait succeeds below.
   // Since the tasks perform work which assumes they have the lock, even though
   // actually this thread does.
@@ -1560,7 +1561,7 @@ void SearchWorker::EnsureNodeTwoFoldCorrectForDepth(Node* child_node,
 
 void SearchWorker::PickNodesToExtendTask(
     Node* node, int base_depth, int collision_limit,
-    const std::vector<Move>& moves_to_base,
+    const MoveList& moves_to_base,
     std::vector<NodeToProcess>* receiver,
     TaskWorkspace* workspace) NO_THREAD_SAFETY_ANALYSIS {
   LCTRACE_FUNCTION_SCOPE;
@@ -1907,7 +1908,7 @@ void SearchWorker::PickNodesToExtendTask(
 }
 
 void SearchWorker::ExtendNode(Node* node, int depth,
-                              const std::vector<Move>& moves_to_node,
+                              const MoveList& moves_to_node,
                               PositionHistory* history) {
   // Initialize position sequence with pre-move position.
   history->Trim(search_->played_history_.GetLength());
@@ -2064,8 +2065,8 @@ int SearchWorker::PrefetchIntoCache(Node* node, int budget, bool is_odd_depth) {
   if (node->IsTerminal()) return 0;
 
   // Populate all subnodes and their scores.
-  typedef std::pair<float, EdgeAndNode> ScoredEdge;
-  std::vector<ScoredEdge> scores;
+  using ScoredEdge = std::pair<float, EdgeAndNode>;
+  absl::InlinedVector<ScoredEdge, 64> scores;
   const float cpuct =
       ComputeCpuct(params_, node->GetN(), node == search_->root_node_);
   const float puct_mult =

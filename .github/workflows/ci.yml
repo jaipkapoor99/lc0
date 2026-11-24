@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, "feat/**", "fix/**", "personal/**"]
+  pull_request:
+    branches: [master, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Python Quality Assurance: Ruff & Pyrefly
+  # ---------------------------------------------------------------------------
+  python-lint:
+    name: Python Lint & Type Check (Ruff & Pyrefly)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install Python dependencies
+        run: uv sync --group dev --no-install-project
+
+      - name: Run Ruff (Linter & Formatter)
+        run: |
+          uv run --no-sync ruff check .
+          uv run --no-sync ruff format --check .
+
+      - name: Run Pyrefly Type Checker
+        run: uv run --no-sync pyrefly check
+
+  # ---------------------------------------------------------------------------
+  # Tier 1 Primary Development Engine: Ubuntu 26.04 with GCC 16
+  # ---------------------------------------------------------------------------
+  linux-gcc16:
+    name: Linux (GCC 16, C++23, CPU/BLAS)
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install GCC 16 and Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-16 g++-16 cmake ninja-build ccache libopenblas-dev zlib1g-dev
+
+      - name: Setup ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ubuntu2604-gcc16-ccache-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-ubuntu2604-gcc16-ccache-
+
+      - name: Configure CMake
+        env:
+          CC: gcc-16
+          CXX: g++-16
+        run: |
+          ccache --zero-stats
+          cmake -B build/release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=23 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DENABLE_NATIVE_ARCH=OFF \
+            -DENABLE_TESTS=ON \
+            -DENABLE_CUDA=OFF
+
+      - name: Build lc0 & tests
+        run: |
+          cmake --build build/release --parallel $(nproc)
+          ccache --show-stats
+
+      - name: Run Tests
+        run: |
+          ctest --test-dir build/release --output-on-failure
+
+      - name: Upload Linux Binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: lc0-linux-x86_64
+          path: build/release/lc0
+
+  # ---------------------------------------------------------------------------
+  # Downstream Tier 2: Windows (MSVC)
+  # ---------------------------------------------------------------------------
+  windows-downstream:
+    name: Windows Downstream (MSVC, C++23)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DENABLE_TESTS=OFF `
+            -DENABLE_CUDA=OFF `
+            -DENABLE_BLAS=OFF
+
+      - name: Build lc0
+        run: |
+          cmake --build build --config Release --parallel $env:NUMBER_OF_PROCESSORS
+
+      - name: Upload Windows Binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: lc0-windows-x64
+          path: build/Release/lc0.exe
+
+  # ---------------------------------------------------------------------------
+  # Downstream Tier 2: macOS (Apple Silicon arm64)
+  # ---------------------------------------------------------------------------
+  macos-downstream:
+    name: macOS Downstream (Apple Silicon arm64)
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Build Tools
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          brew install cmake ninja
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_CUDA=OFF
+
+      - name: Build lc0
+        run: |
+          cmake --build build --parallel $(sysctl -n hw.ncpu)
+
+      - name: Upload macOS Binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: lc0-macos-arm64
+          path: build/lc0
